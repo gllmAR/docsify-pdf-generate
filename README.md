@@ -1,59 +1,104 @@
-# Docsify-pdf-generate
+# Example Markdown Document
 
-## create a button to generate PDF client side
+This document is created to test various Markdown features and their support when generating a PDF using the Docsify plugin with jsPDF.
 
-stuff that should go in pdf
+## Table of Contents
 
-![test](test.jpg)
+- [Headings](#headings)
+- [Paragraphs](#paragraphs)
+- [Emphasis](#emphasis)
+- [Lists](#lists)
+- [Links](#links)
+- [Images](#images)
+- [Tables](#tables)
+- [Code Blocks](#code-blocks)
+- [Blockquotes](#blockquotes)
+- [Horizontal Rule](#horizontal-rule)
+- [Inline HTML](#inline-html)
 
-## embeding image
+## Headings
 
-with text
-> quote
-> 
-> test2
-> 
-> test3
+# H1 Heading
+![High-Res Image 1](https://placehold.co/600x337.png)
+## H2 Heading
+![High-Res Image 2](https://placehold.co/450x253.png)
+### H3 Heading
+![High-Res Image 3](https://placehold.co/300x200.png)
+#### H4 Heading
+![High-Res Image 4](https://placehold.co/108x192.png)  <!-- Portrait -->
+##### H5 Heading
+![High-Res Image 5](https://placehold.co/600x300.png)
+###### H6 Heading
+![High-Res Image 6](https://placehold.co/200x300.png)  <!-- Portrait -->
 
-```bash
-echo lol
-```
-* é è ÷ * 
-* 😎
-* ₧₪№↨בּשּׂ؟⇶♚❂☈☃ ҉ↂ✂❧☠℥
+## Paragraphs
 
-![a test image](./media/1920x1080_1920x1080.png)
+This is a simple paragraph. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
 
+![High-Res Image 7](https://placehold.co/384x216.png)
 
+This is another paragraph with a  
+line break.
 
-# Nested Title 1  
-![a test image](./media/1920x1080_1920x1080.png)
+## Emphasis
 
-some text here
+*Italic*  
+![High-Res Image 8](https://placehold.co/120x240.png)  <!-- Portrait -->  
+**Bold**  
+***Bold and Italic***  
+~~Strikethrough~~
 
-## Nested Title 2
-![a test image](./media/1920x1080_1920x1080.png)
+## Lists
 
-some other text here
+### Unordered List
 
-### Nested Title 3
-![a test image](./media/1920x1080_1920x1080.png)
+- Item 1
+  - Subitem 1
+  - Subitem 2
+- Item 2
+![High-Res Image 9](https://placehold.co/240x120.png)
+- Item 3
 
-some different text here
+### Ordered List
 
-#### Nested Title 4
-![a test image](./media/1920x1080_1920x1080.png)
+1. First item
+2. Second item
+   1. Subitem 1
+   2. Subitem 2
+![High-Res Image 10](https://placehold.co/192x108.png)
+3. Third item
 
-some extra text here
+## Links
 
-##### Nested Title 5
-![a test image](./media/1920x1080_1920x1080.png)
+[Docsify GitHub](https://github.com/docsifyjs/docsify)  
+[Relative Link](README.md)
 
-some text also here
+![High-Res Image 11](https://placehold.co/288x180.png)
 
-###### Nested Title 6
-![a test image](./media/1920x1080_1920x1080.png)
+## Images
 
-Finaly some text here 
+![Docsify Logo](https://docsify.js.org/_media/icon.svg)  
+![Local Image](./path/to/local-image.png)
 
+## Tables
 
+| Header 1 | Header 2 | Header 3 |
+|----------|----------|----------|
+| ![High-Res Image 12](https://placehold.co/1500x1000.png) | Data 1   | Data 2   |
+| Row 2    | ![High-Res Image 13](https://placehold.co/1080x1350.png)  <!-- Portrait --> | Data 4   |
+| Row 3    | Data 5   | ![High-Res Image 14](https://placehold.co/1200x600.png) |
+
+## Code Blocks
+
+### Inline Code
+
+Here is some `inline code`.
+
+![High-Res Image 13](https://placehold.co/600x400.png)
+
+### Block Code
+
+```javascript
+function helloWorld() {
+    console.log("Hello, world!");
+}
