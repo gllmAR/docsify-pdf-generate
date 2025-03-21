@@ -119,7 +119,7 @@ Images in tables are automatically resized to fit within their cells while maint
 
 ## SVG Support
 
-SVG images are fully supported and preserved as vector graphics in the PDF:
+SVG images are fully supported but don't preserve vector graphics in the PDF, they are rasterized:
 
 ![Vector SVG Example](https://upload.wikimedia.org/wikipedia/commons/0/02/SVG_logo.svg)
 
