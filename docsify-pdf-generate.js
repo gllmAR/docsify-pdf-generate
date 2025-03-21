@@ -9,76 +9,135 @@
  */
 (function() {
     // Track loaded modules
-    const loadedModules = {
-        utils: {},
-        modules: {}
-    };
+    const loadedModules = { utils: {}, modules: {} };
     
-    // Get base path where the script is located
-    const getBasePath = () => {
-        const scripts = document.getElementsByTagName('script');
-        const currentScript = scripts[scripts.length - 1];
-        const currentPath = currentScript.src || '';
-        
-        // Check if loaded from a CDN
-        if (currentPath.includes('cdn.jsdelivr.net') || 
-            currentPath.includes('unpkg.com') || 
-            currentPath.includes('cdnjs.cloudflare.com')) {
-            
-            // Extract the base path from CDN URL
-            const pathParts = currentPath.split('/');
-            pathParts.pop(); // Remove the current script name
-            return pathParts.join('/') + '/';
-        }
-        
-        // Get local path
-        const path = currentPath.split('/');
-        path.pop(); // Remove the current script name
-        return path.join('/') + '/';
-    };
-    
-    const basePath = getBasePath();
+    // Module paths configuration
     const modulesPath = {
         utils: [
             'js/utils/logger.js',
             'js/utils/dependencies.js',
-            'js/utils/svg2pdf-bridge.js', // Add the bridge before other SVG utilities
+            'js/utils/latex-parser.js',
+            'js/utils/html-parser.js', 
+            'js/utils/svg2pdf-bridge.js',
             'js/utils/jspdf-svg-plugin.js',
             'js/utils/svg2pdf-fallback.js',
-            'js/utils/link-utils.js'  // Add this before modules that depend on it
+            'js/utils/link-utils.js'
+        ],
+        themes: [
+            'js/themes/light-theme.js',
+            'js/themes/dark-theme.js',
+            'js/themes/theme-manager.js'
         ],
         modules: [
             'js/modules/markdown-parser.js',
             'js/modules/image-processor.js',
             'js/modules/svg-handler.js',
-            'js/modules/table-renderer.js', // Make sure table renderer comes before PDF generator
-            'js/modules/element-renderer.js', // And element renderer before PDF generator
+            'js/modules/table-renderer.js',
+            'js/modules/element-renderer.js',
             'js/modules/pdf-generator.js',
-            'js/modules/ui.js'  // Move UI to the last position to ensure all other modules are loaded
+            'js/modules/ui.js'
         ],
         main: 'js/main.js'
     };
     
+    // Get base path for module loading
+    const basePath = getBasePath();
+    
+    // Initialize when the page is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+    
+    // Main initialization function
+    function init() {
+        embedStyles();
+        initializeApp();
+        
+        // Fallback initialization
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                if (typeof UIManager?.initialize === 'function' && 
+                    !document.querySelector('.pdf-button')) {
+                    console.log('Fallback UI initialization...');
+                    UIManager.initialize();
+                }
+            }, 1000);
+        });
+    }
+    
+    // Get the path where this script is located
+    function getBasePath() {
+        const scripts = document.getElementsByTagName('script');
+        const currentScript = scripts[scripts.length - 1];
+        const currentPath = currentScript.src || '';
+        
+        // Handle CDN loading
+        if (currentPath.includes('cdn.jsdelivr.net') || 
+            currentPath.includes('unpkg.com') || 
+            currentPath.includes('cdnjs.cloudflare.com')) {
+            
+            const pathParts = currentPath.split('/');
+            pathParts.pop();
+            return pathParts.join('/') + '/';
+        }
+        
+        // Handle local path
+        const path = currentPath.split('/');
+        path.pop();
+        return path.join('/') + '/';
+    }
+    
+    // Load application modules sequentially
+    function initializeApp() {
+        console.log('Initializing Docsify PDF Generator...');
+        
+        // Load modules in sequence: utils → themes → modules → main
+        loadSequentially(
+            modulesPath.utils, 
+            () => loadSequentially(
+                modulesPath.themes,
+                () => loadSequentially(
+                    modulesPath.modules, 
+                    () => loadScript(
+                        basePath + modulesPath.main,
+                        () => {
+                            console.log('Docsify PDF Generator initialized successfully');
+                            if (typeof UIManager?.initialize === 'function') {
+                                console.log('Initializing UI components...');
+                                UIManager.initialize();
+                            } else {
+                                console.error('UIManager not available, PDF button will not be created');
+                            }
+                        },
+                        () => console.error('Failed to load main script')
+                    ),
+                    basePath
+                ),
+                basePath
+            ),
+            basePath
+        );
+    }
+    
     // Load a script and execute callback when loaded
-    const loadScript = (url, callback, errorCallback) => {
+    function loadScript(url, callback, errorCallback) {
         const script = document.createElement('script');
         script.async = true;
         script.src = url;
         
-        script.onload = () => {
-            callback(url);
-        };
-        
+        script.onload = () => callback(url);
         script.onerror = () => {
             console.error(`Failed to load: ${url}`);
             if (errorCallback) errorCallback(url);
         };
         
         document.head.appendChild(script);
-    };
+    }
     
     // Load a group of scripts sequentially
-    const loadSequentially = (scripts, callback, prefix = '') => {
+    function loadSequentially(scripts, callback, prefix = '') {
         if (scripts.length === 0) {
             if (callback) callback();
             return;
@@ -96,54 +155,14 @@
                 loadSequentially(remainingScripts, callback, prefix);
             },
             () => {
-                // Continue even if a script fails to load
                 console.warn(`Skipping: ${nextScript} due to load error`);
                 loadSequentially(remainingScripts, callback, prefix);
             }
         );
-    };
-    
-    // Initialize the application by loading all scripts
-    const initializeApp = () => {
-        console.log('Initializing Docsify PDF Generator...');
-        
-        // First load all utility scripts
-        loadSequentially(
-            modulesPath.utils, 
-            () => {
-                // Then load all module scripts
-                loadSequentially(
-                    modulesPath.modules, 
-                    () => {
-                        // Finally load the main entry point
-                        loadScript(
-                            basePath + modulesPath.main,
-                            () => {
-                                console.log('Docsify PDF Generator initialized successfully');
-                                
-                                // CRITICAL FIX: Explicitly initialize UI after all scripts are loaded
-                                // This ensures the PDF button is created and visible
-                                if (typeof UIManager !== 'undefined' && typeof UIManager.initialize === 'function') {
-                                    console.log('Initializing UI components...');
-                                    UIManager.initialize();
-                                } else {
-                                    console.error('UIManager not available, PDF button will not be created');
-                                }
-                            },
-                            () => {
-                                console.error('Failed to load main script');
-                            }
-                        );
-                    },
-                    basePath
-                );
-            },
-            basePath
-        );
-    };
+    }
     
     // Embed CSS for the PDF button and UI elements
-    const embedStyles = () => {
+    function embedStyles() {
         const styles = `
             .pdf-button {
                 position: fixed;
@@ -155,19 +174,16 @@
                 border: none;
                 border-radius: 4px;
                 cursor: pointer;
-                z-index: 100;
+                z-index: 3;
                 box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+                user-select: none;
             }
             
             @media print {
-                .pdf-button {
-                    display: none;
-                }
+                .pdf-button { display: none; }
             }
             
-            #progressContainer {
-                margin-top: 10px;
-            }
+            #progressContainer { margin-top: 10px; }
             
             #progressBar {
                 -webkit-appearance: none;
@@ -185,35 +201,17 @@
                 background-color: #42b983;
                 border-radius: 5px;
             }
+            
+            #pdfSettingsDialog {
+                z-index: 400;
+                background-color: white;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            }
         `;
         
         const styleElement = document.createElement('style');
         styleElement.textContent = styles;
         document.head.appendChild(styleElement);
-    };
-    
-    // Initialize when the page is ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            embedStyles();
-            initializeApp();
-        });
-    } else {
-        embedStyles();
-        initializeApp();
     }
-    
-    // Add a fallback initialization for the UI just in case
-    window.addEventListener('load', function() {
-        // Wait a bit to ensure all scripts are evaluated
-        setTimeout(function() {
-            if (typeof UIManager !== 'undefined' && typeof UIManager.initialize === 'function') {
-                // Check if the button already exists
-                if (!document.querySelector('.pdf-button')) {
-                    console.log('Fallback UI initialization...');
-                    UIManager.initialize();
-                }
-            }
-        }, 1000);
-    });
 })();

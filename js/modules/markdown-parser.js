@@ -91,81 +91,12 @@ const MarkdownParser = (function() {
                 tableRows = [];
             }
 
-            // Check for LaTeX-style commands wrapped in HTML comments
-            const latexCommandMatch = line.trim().match(/<!--\s*\\(\w+)(?:\{(.*?)\})?\s*-->/i);
-            if (latexCommandMatch) {
-                const command = latexCommandMatch[1];
-                const parameter = latexCommandMatch[2] || null;
-                
-                switch (command.toLowerCase()) {
-                    case 'newpage':
-                        parsedContent.push({
-                            type: 'pagebreak'
-                        });
-                        i++;
-                        continue;
-                    case 'vspace':
-                        // Add vertical space
-                        parsedContent.push({
-                            type: 'vspace',
-                            size: parameter ? parseInt(parameter) : 10 // Default 10mm if no parameter
-                        });
-                        i++;
-                        continue;
-                    case 'hline':
-                        // Add horizontal line
-                        parsedContent.push({
-                            type: 'hr'
-                        });
-                        i++;
-                        continue;
-                    case 'textbf':
-                        // Bold text
-                        parsedContent.push({
-                            type: 'styledText',
-                            text: parameter,
-                            style: 'bold'
-                        });
-                        i++;
-                        continue;
-                    case 'textit':
-                        // Italic text
-                        parsedContent.push({
-                            type: 'styledText',
-                            text: parameter,
-                            style: 'italic'
-                        });
-                        i++;
-                        continue;
-                    case 'textcolor':
-                        // Extract color and text from parameter
-                        if (parameter) {
-                            const colorMatch = parameter.match(/^(\w+)\}\{(.*)$/);
-                            if (colorMatch) {
-                                parsedContent.push({
-                                    type: 'styledText',
-                                    text: colorMatch[2],
-                                    style: 'color',
-                                    color: colorMatch[1]
-                                });
-                                i++;
-                                continue;
-                            }
-                        }
-                        break;
-                    case 'centering':
-                        // Enable centering for next element
-                        parsedContent.push({
-                            type: 'alignment',
-                            align: 'center'
-                        });
-                        i++;
-                        continue;
-                    default:
-                        // Unrecognized command, treat as comment (skip)
-                        i++;
-                        continue;
-                }
+            // Check for LaTeX-style commands using the new parser
+            const latexCommand = LaTeXParser.processCommand(line);
+            if (latexCommand) {
+                parsedContent.push(latexCommand);
+                i++;
+                continue;
             }
 
             // Check for code blocks
@@ -257,72 +188,27 @@ const MarkdownParser = (function() {
                 // Get the indentation level
                 const indentLevel = ulMatch[1].length;
                 
-                // Check for links in the list item text - improved regex to better match brackets
+                // Parse the item text to handle formatting
                 const itemText = ulMatch[2];
-                const linkRegex = /\[(.*?)\]\((.*?)\)/;
-                const linkMatch = itemText.match(linkRegex);
+                const formattedSegments = parseTextFormatting(itemText);
                 
-                if (linkMatch) {
-                    // Process the link in the list item
-                    const linkText = linkMatch[1];
-                    let linkUrl = linkMatch[2];
-                    
-                    // Process internal links - preserve hash for TOC links
-                    if (linkUrl.startsWith('#')) {
-                        Logger.debug(`Table of Contents link found in list: text="${linkText}", url="${linkUrl}"`);
-                        
-                        // Create a list item with link - store exact text to ensure proper width calculation
-                        const fullItem = {
-                            text: itemText.replace(linkMatch[0], linkText), // Replace link with just the text
-                            level: Math.floor(indentLevel / 2),
-                            hasLink: true,
-                            linkText: linkText,
-                            linkUrl: linkUrl,
-                            originalText: itemText
-                        };
-                        
-                        // Debug the link parsing
-                        Logger.debug(`Parsed TOC link item - text="${fullItem.text}", linkText="${fullItem.linkText}", url="${fullItem.linkUrl}"`);
-                        
-                        listItems.push(fullItem);
-                    } else if (linkUrl.endsWith('.md')) {
-                        // Convert relative markdown links
-                        linkUrl = '#';
-                        Logger.debug(`Converting .md link in list item to: ${linkUrl}`);
-                        
-                        listItems.push({
-                            text: itemText.replace(linkMatch[0], linkText),
-                            level: Math.floor(indentLevel / 2),
-                            hasLink: true,
-                            linkText: linkText,
-                            linkUrl: linkUrl,
-                            originalText: itemText
-                        });
-                    } else {
-                        // External link
-                        listItems.push({
-                            text: itemText.replace(linkMatch[0], linkText),
-                            level: Math.floor(indentLevel / 2),
-                            hasLink: true,
-                            linkText: linkText,
-                            linkUrl: linkUrl,
-                            originalText: itemText
-                        });
-                    }
-                } else {
-                    // Regular list item without link
-                    listItems.push({
-                        text: itemText,
-                        level: Math.floor(indentLevel / 2)
-                    });
-                }
+                // Add list item with properly formatted segments
+                listItems.push({
+                    text: itemText.replace(/\*\*\*(.*?)\*\*\*/g, '$1')
+                                 .replace(/\*\*(.*?)\*\*/g, '$1')
+                                 .replace(/\*(.*?)\*/g, '$1')
+                                 .replace(/~~(.*?)~~/g, '$1'), // Plain text without markup
+                    level: Math.floor(indentLevel / 2),
+                    hasFormatting: formattedSegments.length > 0,
+                    formattedSegments: formattedSegments
+                });
                 
                 i++;
                 continue;
             }
 
             // Similar change for ordered lists
-            const olMatch = line.match(/^(\s*)\d+\.\s+(.*)$/);
+            const olMatch = line.match(/^(\s*)(\d+)\.\s+(.*)$/);
             if (olMatch) {
                 if (currentListType !== 'ol') {
                     if (listItems.length > 0) {
@@ -336,60 +222,25 @@ const MarkdownParser = (function() {
                     currentListType = 'ol';
                 }
                 
-                // Get the indentation level
+                // Get the indentation level & original number
                 const indentLevel = olMatch[1].length;
+                const originalNumber = parseInt(olMatch[2], 10);
                 
-                // Check for links in the list item text
-                const itemText = olMatch[2];
-                const linkRegex = /\[(.*?)\]\((.*?)\)/;
-                const linkMatch = itemText.match(linkRegex);
+                // Parse the item text to handle formatting
+                const itemText = olMatch[3];
+                const formattedSegments = parseTextFormatting(itemText);
                 
-                if (linkMatch) {
-                    // Process the link in the list item
-                    const linkText = linkMatch[1];
-                    let linkUrl = linkMatch[2];
-                    
-                    // Process internal links - preserve hash for TOC links
-                    if (linkUrl.startsWith('#')) {
-                        Logger.debug(`TOC link in ordered list item: ${linkUrl}`);
-                        
-                        // Create a list item with link
-                        listItems.push({
-                            text: itemText.replace(linkMatch[0], linkText), // Replace link with just the text
-                            level: Math.floor(indentLevel / 2),
-                            hasLink: true,
-                            linkText: linkText,
-                            linkUrl: linkUrl
-                        });
-                    } else if (linkUrl.endsWith('.md')) {
-                        // Convert relative markdown links
-                        linkUrl = '#';
-                        Logger.debug(`Converting .md link in ordered list item to: ${linkUrl}`);
-                        
-                        listItems.push({
-                            text: itemText.replace(linkMatch[0], linkText),
-                            level: Math.floor(indentLevel / 2),
-                            hasLink: true,
-                            linkText: linkText,
-                            linkUrl: linkUrl
-                        });
-                    } else {
-                        // External link
-                        listItems.push({
-                            text: itemText.replace(linkMatch[0], linkText),
-                            level: Math.floor(indentLevel / 2),
-                            hasLink: true,
-                            linkText: linkText,
-                            linkUrl: linkUrl
-                        });
-                    }
-                } else {
-                    // Regular list item without link
-                    listItems.push({
-                        text: itemText,
-                        level: Math.floor(indentLevel / 2)
-                    });
-                }
+                // Add list item with properly formatted segments and original number
+                listItems.push({
+                    text: itemText.replace(/\*\*\*(.*?)\*\*\*/g, '$1')
+                                 .replace(/\*\*(.*?)\*\*/g, '$1')
+                                 .replace(/\*(.*?)\*/g, '$1')
+                                 .replace(/~~(.*?)~~/g, '$1'), // Plain text without markup
+                    level: Math.floor(indentLevel / 2),
+                    originalNumber: originalNumber, // Store the original number for proper rendering
+                    hasFormatting: formattedSegments.length > 0,
+                    formattedSegments: formattedSegments
+                });
                 
                 i++;
                 continue;
@@ -775,6 +626,53 @@ const MarkdownParser = (function() {
                 i++;
                 continue;
             }
+
+            // Process inline HTML - improved detection for block-level HTML elements
+            if (line.trim().startsWith('<')) {
+                // Collect lines to handle multi-line HTML blocks
+                let htmlContent = line;
+                const tagMatch = line.match(/<(\w+)([^>]*)>/);
+                
+                if (tagMatch) {
+                    const tagName = tagMatch[1].toLowerCase();
+                    const closingTag = `</${tagName}>`;
+                    
+                    // If this is a self-closing tag or the closing tag is on the same line, process it
+                    if (line.includes(closingTag) || line.includes('/>')) {
+                        const parsedHtml = HtmlParser.parseHtmlBlock(htmlContent);
+                        if (parsedHtml) {
+                            Logger.debug(`Parsed single-line HTML ${parsedHtml.tagName} with content: ${parsedHtml.content}`);
+                            parsedContent.push(parsedHtml);
+                            i++;
+                            continue;
+                        }
+                    } 
+                    // Otherwise, collect lines until we find the closing tag
+                    else {
+                        let j = i + 1;
+                        let foundClosing = false;
+                        
+                        while (j < lines.length && !foundClosing) {
+                            htmlContent += '\n' + lines[j];
+                            if (lines[j].includes(closingTag)) {
+                                foundClosing = true;
+                            }
+                            j++;
+                        }
+                        
+                        if (foundClosing) {
+                            const parsedHtml = HtmlParser.parseHtmlBlock(htmlContent);
+                            if (parsedHtml) {
+                                Logger.debug(`Parsed multi-line HTML ${parsedHtml.tagName} with content: ${parsedHtml.content}`);
+                                parsedContent.push(parsedHtml);
+                                i = j; // Skip all the lines we've processed
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
+
             i++;
         }
 
@@ -807,6 +705,168 @@ const MarkdownParser = (function() {
         }
 
         return parsedContent;
+    }
+
+    // Add this new helper function to parse text formatting
+    function parseTextFormatting(text) {
+        const segments = [];
+        
+        // Process Bold and Italic
+        let remainingText = text;
+        
+        // Bold and Italic (***text***)
+        const boldItalicRegex = /\*\*\*(.*?)\*\*\*/g;
+        const boldItalicMatches = [...remainingText.matchAll(boldItalicRegex)];
+        
+        if (boldItalicMatches.length > 0) {
+            let lastIndex = 0;
+            
+            boldItalicMatches.forEach(match => {
+                // Add text before this match
+                if (match.index > lastIndex) {
+                    segments.push({
+                        text: remainingText.substring(lastIndex, match.index),
+                        format: 'normal'
+                    });
+                }
+                
+                // Add the bold-italic text
+                segments.push({
+                    text: match[1],
+                    format: 'bolditalic'
+                });
+                
+                lastIndex = match.index + match[0].length;
+            });
+            
+            // Add any text after the last match
+            if (lastIndex < remainingText.length) {
+                segments.push({
+                    text: remainingText.substring(lastIndex),
+                    format: 'normal'
+                });
+            }
+            
+            return segments;
+        }
+        
+        // Bold (**text**)
+        const boldRegex = /\*\*(.*?)\*\*/g;
+        const boldMatches = [...remainingText.matchAll(boldRegex)];
+        
+        if (boldMatches.length > 0) {
+            let lastIndex = 0;
+            
+            boldMatches.forEach(match => {
+                // Add text before this match
+                if (match.index > lastIndex) {
+                    segments.push({
+                        text: remainingText.substring(lastIndex, match.index),
+                        format: 'normal'
+                    });
+                }
+                
+                // Add the bold text
+                segments.push({
+                    text: match[1],
+                    format: 'bold'
+                });
+                
+                lastIndex = match.index + match[0].length;
+            });
+            
+            // Add any text after the last match
+            if (lastIndex < remainingText.length) {
+                segments.push({
+                    text: remainingText.substring(lastIndex),
+                    format: 'normal'
+                });
+            }
+            
+            return segments;
+        }
+        
+        // Italic (*text*)
+        const italicRegex = /\*(.*?)\*/g;
+        const italicMatches = [...remainingText.matchAll(italicRegex)];
+        
+        if (italicMatches.length > 0) {
+            let lastIndex = 0;
+            
+            italicMatches.forEach(match => {
+                // Add text before this match
+                if (match.index > lastIndex) {
+                    segments.push({
+                        text: remainingText.substring(lastIndex, match.index),
+                        format: 'normal'
+                    });
+                }
+                
+                // Add the italic text
+                segments.push({
+                    text: match[1],
+                    format: 'italic'
+                });
+                
+                lastIndex = match.index + match[0].length;
+            });
+            
+            // Add any text after the last match
+            if (lastIndex < remainingText.length) {
+                segments.push({
+                    text: remainingText.substring(lastIndex),
+                    format: 'normal'
+                });
+            }
+            
+            return segments;
+        }
+        
+        // Strikethrough (~~text~~)
+        const strikeRegex = /~~(.*?)~~/g;
+        const strikeMatches = [...remainingText.matchAll(strikeRegex)];
+        
+        if (strikeMatches.length > 0) {
+            let lastIndex = 0;
+            
+            strikeMatches.forEach(match => {
+                // Add text before this match
+                if (match.index > lastIndex) {
+                    segments.push({
+                        text: remainingText.substring(lastIndex, match.index),
+                        format: 'normal'
+                    });
+                }
+                
+                // Add the strikethrough text
+                segments.push({
+                    text: match[1],
+                    format: 'strikethrough'
+                });
+                
+                lastIndex = match.index + match[0].length;
+            });
+            
+            // Add any text after the last match
+            if (lastIndex < remainingText.length) {
+                segments.push({
+                    text: remainingText.substring(lastIndex),
+                    format: 'normal'
+                });
+            }
+            
+            return segments;
+        }
+        
+        // If no formatting found, return the text as normal
+        if (segments.length === 0) {
+            segments.push({
+                text: text,
+                format: 'normal'
+            });
+        }
+        
+        return segments;
     }
     
     return {

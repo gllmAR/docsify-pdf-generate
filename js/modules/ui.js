@@ -3,15 +3,10 @@
  */
 const UIManager = (function() {
     // Store DOM elements references
-    let printButton;
-    let settingsDialog;
-    let progressBar;
-    let progressText;
-    let progressContainer;
+    let printButton, settingsDialog, progressBar, progressText, progressContainer;
     
     // Initialize UI components
     function initialize() {
-        // First check if button already exists to avoid duplicates
         if (document.querySelector('.pdf-button')) {
             Logger.debug('PDF button already exists, skipping initialization');
             return;
@@ -22,35 +17,38 @@ const UIManager = (function() {
         createPrintButton();
         setupEventListeners();
         
-        // Verify button exists after creation
-        if (!document.querySelector('.pdf-button')) {
+        document.querySelector('.pdf-button') ? 
+            Logger.debug('PDF button created successfully') : 
             Logger.error('PDF button creation failed!');
-        } else {
-            Logger.debug('PDF button created successfully');
-        }
     }
     
-    // Create the settings dialog
+    // Create settings dialog with all configuration options
     function createSettingsDialog() {
         settingsDialog = document.createElement('div');
-        settingsDialog.style.position = 'fixed';
-        settingsDialog.style.top = '50%';
-        settingsDialog.style.left = '50%';
-        settingsDialog.style.transform = 'translate(-50%, -50%)';
-        settingsDialog.style.padding = '20px';
-        settingsDialog.style.backgroundColor = '#fff';
-        settingsDialog.style.border = '1px solid #ccc';
-        settingsDialog.style.zIndex = '1000';
-        settingsDialog.style.display = 'none';
-        settingsDialog.style.maxWidth = '500px';
-        settingsDialog.style.width = '90%';
-        settingsDialog.style.maxHeight = '80vh';
-        settingsDialog.style.overflow = 'auto';
-        settingsDialog.style.borderRadius = '8px';
-        settingsDialog.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
         
+        // Set common dialog styles
+        Object.assign(settingsDialog.style, {
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            padding: '20px',
+            backgroundColor: '#fff',
+            border: '1px solid #ccc',
+            zIndex: '500',
+            display: 'none',
+            maxWidth: '500px',
+            width: '90%',
+            maxHeight: '80vh',
+            overflow: 'auto',
+            borderRadius: '8px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+        });
+        
+        // Add dialog content
         settingsDialog.innerHTML = `
             <h3>PDF Settings</h3>
+            <!-- Basic PDF settings -->
             <div style="margin-bottom: 10px;">
                 <label for="paperSize">Paper Size:</label>
                 <select id="paperSize" style="margin-left: 5px;">
@@ -70,10 +68,12 @@ const UIManager = (function() {
             
             <div style="margin-bottom: 10px;">
                 <label for="theme">Theme:</label>
-                <select id="theme" style="margin-left: 5px;">
-                    <option value="light">Light</option>
-                    <option value="dark">Dark</option>
+                <select id="themeSelect" style="margin-left: 5px;">
+                    ${generateThemeOptions()}
                 </select>
+                <div style="font-size: 10px; color: #999; margin-top: 3px;">
+                    Changes document colors and styles
+                </div>
             </div>
             
             <div style="margin-bottom: 10px;">
@@ -148,12 +148,14 @@ const UIManager = (function() {
                 </div>
             </div>
             
+            <!-- UI controls for PDF generation -->
             <div style="display: flex; justify-content: space-between; margin-top: 15px;">
                 <button id="startPDF" style="padding: 8px 15px; background-color: #42b983; color: white; border: none; border-radius: 4px; cursor: pointer;">Generate PDF</button>
                 <button id="cancelPDF" style="padding: 8px 15px; background-color: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">Cancel</button>
                 <button id="debugPDF" style="padding: 8px 15px; background-color: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">Debug</button>
             </div>
             
+            <!-- Progress tracking -->
             <div id="progressContainer" style="display: none; margin-top: 15px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                     <div id="progressText">Processing...</div>
@@ -169,61 +171,82 @@ const UIManager = (function() {
         
         document.body.appendChild(settingsDialog);
         
-        // Store progress elements
+        // Cache DOM references for better performance
         progressContainer = document.getElementById('progressContainer');
         progressBar = document.getElementById('progressBar');
         progressText = document.getElementById('progressText');
         
-        // Store additional progress elements
-        const progressStepDetail = document.getElementById('progressStepDetail');
-        
-        // Add minimize button functionality
+        // Set up minimize/close buttons
+        setupProgressControls();
+    }
+    
+    // Set up progress control buttons
+    function setupProgressControls() {
+        // Minimize button handler
         document.getElementById('minimizeProgress').addEventListener('click', function() {
-            const btn = this;
-            const progressBarElem = document.getElementById('progressBar');
+            const isMinimized = progressBar.style.display === 'none';
             const progressStepDetail = document.getElementById('progressStepDetail');
             
-            if (progressBarElem.style.display !== 'none') {
-                progressBarElem.style.display = 'none';
-                progressStepDetail.style.display = 'none';
-                btn.textContent = '+';
-            } else {
-                progressBarElem.style.display = 'block';
-                progressStepDetail.style.display = 'block';
-                btn.textContent = '−';
-            }
+            // Toggle minimized state
+            progressBar.style.display = isMinimized ? 'block' : 'none';
+            progressStepDetail.style.display = isMinimized ? 'block' : 'none';
+            this.textContent = isMinimized ? '−' : '+';
         });
         
-        document.getElementById('closeProgress').addEventListener('click', function() {
+        // Close button handler
+        document.getElementById('closeProgress').addEventListener('click', () => {
             settingsDialog.style.display = 'none';
-            // Don't reset dialog yet - allow regeneration with same settings
         });
     }
     
-    // Create the print button
+    // Generate theme options for selector
+    function generateThemeOptions() {
+        if (typeof ThemeManager === 'undefined') {
+            return '<option value="light">Light</option><option value="dark">Dark</option>';
+        }
+        
+        const themes = ThemeManager.getAvailableThemes();
+        const currentTheme = ThemeManager.getCurrentTheme().name.toLowerCase();
+        
+        return themes.map(theme => {
+            const themeName = typeof theme === 'string' ? theme : theme.name;
+            const isSelected = themeName.toLowerCase() === currentTheme ? 'selected' : '';
+            
+            // Display name with first letter capitalized
+            const displayName = themeName.charAt(0).toUpperCase() + themeName.slice(1).toLowerCase();
+            
+            return `<option value="${themeName}" ${isSelected}>${displayName}</option>`;
+        }).join('');
+    }
+    
+    // Create the PDF button
     function createPrintButton() {
         printButton = document.createElement('button');
         printButton.innerText = 'Print to PDF';
-        printButton.className = 'pdf-button'; // Add a class for easier selection
-        printButton.style.position = 'fixed';
-        printButton.style.bottom = '20px';
-        printButton.style.right = '20px';
-        printButton.style.padding = '8px 15px';
-        printButton.style.backgroundColor = '#42b983';
-        printButton.style.color = 'white';
-        printButton.style.border = 'none';
-        printButton.style.borderRadius = '4px';
-        printButton.style.cursor = 'pointer';
-        printButton.style.zIndex = '100';
-        printButton.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+        printButton.className = 'pdf-button';
         
-        // Make button creation more robust
+        // Apply isolated style to avoid interference with other elements
+        Object.assign(printButton.style, {
+            position: 'fixed',
+            bottom: '20px',
+            right: '20px',
+            padding: '8px 15px',
+            backgroundColor: '#42b983',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            zIndex: '3',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
+            userSelect: 'none'
+        });
+        
+        // Add directly to body for isolation
         try {
             document.body.appendChild(printButton);
-            Logger.debug('Print button added to DOM');
+            Logger.debug('Print button added to document body');
         } catch (e) {
             Logger.error('Error adding print button to DOM:', e);
-            // Try an alternative approach
             setTimeout(() => {
                 try {
                     document.body.appendChild(printButton);
@@ -235,89 +258,137 @@ const UIManager = (function() {
         }
     }
     
-    // Set up event listeners for UI interactions
-    function setupEventListeners() {
-        // Print button opens settings dialog
-        printButton.addEventListener('click', () => {
-            settingsDialog.style.display = 'block';
-        });
+    // Adjust button position (simplified)
+    function adjustButtonPosition() {
+        if (!printButton) return;
         
-        // Generate PDF button - FIXED: Keep dialog visible for progress updates
-        document.getElementById('startPDF').addEventListener('click', () => {
-            const options = getOptions();
-            
-            // Create a floating progress panel instead of modifying the dialog
-            document.querySelectorAll('h3, div:not(#progressContainer)').forEach(element => {
-                if (element.id !== 'progressContainer' && !element.closest('#progressContainer')) {
-                    element.style.display = 'none';
-                }
-            });
-            
-            // Configure the progress container appearance for generation
-            progressContainer.style.display = 'block';
-            document.getElementById('progressStepDetail').style.display = 'block';
-            progressText.textContent = 'Initializing PDF generation...';
-            
-            // Start PDF generation
-            setTimeout(() => {
-                // Ensure PDFGenerator is available
-                if (typeof PDFGenerator !== 'undefined' && PDFGenerator && typeof PDFGenerator.generatePDF === 'function') {
-                    PDFGenerator.generatePDF(options);
-                } else {
-                    updateProgress(0, 'Error: PDF Generator not available', 'Please reload the page and try again.');
-                    console.error('PDFGenerator is not available');
-                }
-            }, 100);
-        });
-        
-        // Cancel button
-        document.getElementById('cancelPDF').addEventListener('click', () => {
-            settingsDialog.style.display = 'none';
-            resetDialogToSettingsMode();
-        });
-        
-        // Debug button
-        document.getElementById('debugPDF').addEventListener('click', () => {
-            const options = getOptions();
-            settingsDialog.style.display = 'none';
-            
-            // Ensure PDFGenerator is available
-            if (typeof PDFGenerator !== 'undefined' && PDFGenerator && typeof PDFGenerator.debugPDF === 'function') {
-                PDFGenerator.debugPDF(options);
-            } else {
-                console.error('PDFGenerator.debugPDF is not available');
-                // Show an error message
-                const errorBox = document.createElement('div');
-                errorBox.style.position = 'fixed';
-                errorBox.style.bottom = '70px';
-                errorBox.style.right = '20px';
-                errorBox.style.backgroundColor = '#f8d7da';
-                errorBox.style.color = '#721c24';
-                errorBox.style.padding = '10px';
-                errorBox.style.borderRadius = '5px';
-                errorBox.style.zIndex = '1000';
-                errorBox.textContent = 'PDF Generator not ready. Please reload the page.';
-                document.body.appendChild(errorBox);
-                
-                // Auto-remove after 5 seconds
-                setTimeout(() => {
-                    if (errorBox.parentNode) errorBox.parentNode.removeChild(errorBox);
-                }, 5000);
-            }
-        });
+        // Keep fixed position to avoid interference
+        printButton.style.right = '20px';
+        printButton.style.bottom = '20px';
     }
     
-    // Get options from the form - force raster mode for SVGs
-    function getOptions() {
-        const options = {
-            svgHandling: 'raster' // Force raster mode for now
-        };
+    // Set up all event listeners
+    function setupEventListeners() {
+        // Button click handlers
+        printButton.addEventListener('click', showSettingsDialog);
+        document.getElementById('startPDF').addEventListener('click', startPdfGeneration);
+        document.getElementById('cancelPDF').addEventListener('click', closeSettingsDialog);
+        document.getElementById('debugPDF').addEventListener('click', debugPdfGeneration);
+    }
+    
+    // Show settings dialog
+    function showSettingsDialog() {
+        settingsDialog.style.display = 'block';
+        createOverlay();
+    }
+    
+    // Close settings dialog
+    function closeSettingsDialog() {
+        settingsDialog.style.display = 'none';
+        resetDialogToSettingsMode();
+        removeOverlay();
+    }
+    
+    // Start PDF generation
+    function startPdfGeneration() {
+        const options = getOptions();
         
-        // Get all options except svgHandling from form
-        const form = {
+        // Hide settings, show progress
+        document.querySelectorAll('#settingsDialog h3, #settingsDialog div:not(#progressContainer)').forEach(element => {
+            if (element.id !== 'progressContainer' && !element.closest('#progressContainer')) {
+                element.style.display = 'none';
+            }
+        });
+        
+        // Show progress updates
+        progressContainer.style.display = 'block';
+        document.getElementById('progressStepDetail').style.display = 'block';
+        progressText.textContent = 'Initializing PDF generation...';
+        
+        // Start PDF generation with small delay for UI updates
+        setTimeout(() => {
+            if (typeof PDFGenerator?.generatePDF === 'function') {
+                PDFGenerator.generatePDF(options);
+            } else {
+                updateProgress(0, 'Error: PDF Generator not available', 'Please reload the page and try again.');
+                console.error('PDFGenerator is not available');
+            }
+        }, 100);
+    }
+    
+    // Debug PDF generation
+    function debugPdfGeneration() {
+        const options = getOptions();
+        settingsDialog.style.display = 'none';
+        
+        if (typeof PDFGenerator?.debugPDF === 'function') {
+            PDFGenerator.debugPDF(options);
+        } else {
+            showErrorMessage('PDF Generator not ready. Please reload the page.');
+        }
+    }
+    
+    // Show temporary error message
+    function showErrorMessage(message, duration = 5000) {
+        const errorBox = document.createElement('div');
+        Object.assign(errorBox.style, {
+            position: 'fixed',
+            bottom: '70px',
+            right: '20px',
+            backgroundColor: '#f8d7da',
+            color: '#721c24',
+            padding: '10px',
+            borderRadius: '5px',
+            zIndex: '1000'
+        });
+        errorBox.textContent = message;
+        document.body.appendChild(errorBox);
+        
+        setTimeout(() => {
+            if (errorBox.parentNode) errorBox.parentNode.removeChild(errorBox);
+        }, duration);
+    }
+    
+    // Create semi-transparent overlay
+    function createOverlay() {
+        if (document.getElementById('pdfSettingsOverlay')) return;
+        
+        const overlay = document.createElement('div');
+        overlay.id = 'pdfSettingsOverlay';
+        
+        Object.assign(overlay.style, {
+            position: 'fixed',
+            top: '0',
+            left: '0',
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            zIndex: '200'
+        });
+        
+        overlay.addEventListener('click', e => {
+            if (e.target === overlay) closeSettingsDialog();
+        });
+        
+        document.body.appendChild(overlay);
+    }
+    
+    // Remove overlay
+    function removeOverlay() {
+        const overlay = document.getElementById('pdfSettingsOverlay');
+        if (overlay) document.body.removeChild(overlay);
+    }
+    
+    // Get all options from form fields
+    function getOptions() {
+        // Fixed options that shouldn't change
+        const fixedOptions = { svgHandling: 'raster' };
+        
+        // Extract form field values
+        const formOptions = {
             paperSize: document.getElementById('paperSize').value,
             orientation: document.getElementById('orientation').value,
-            theme: document.getElementById('theme').value,
+            theme: document.getElementById('themeSelect').value,
             margins: document.getElementById('margins').value,
             imageQuality: document.getElementById('imageQuality').value,
             pdfVersion: document.getElementById('pdfVersion').value,
@@ -329,49 +400,39 @@ const UIManager = (function() {
             respectPageBreaks: document.getElementById('respectPageBreaks').checked
         };
         
-        // Merge form options with forced options
-        return {...form, ...options};
+        return {...formOptions, ...fixedOptions};
     }
     
-    // Reset dialog back to settings mode
+    // Reset dialog to settings mode
     function resetDialogToSettingsMode() {
-        // Show all settings fields again
-        const settingsFields = settingsDialog.querySelectorAll('div');
-        settingsFields.forEach(field => {
+        // Show all settings fields
+        settingsDialog.querySelectorAll('div').forEach(field => {
             field.style.display = '';
         });
         
         // Hide progress
-        if (progressContainer) {
-            progressContainer.style.display = 'none';
-        }
+        if (progressContainer) progressContainer.style.display = 'none';
         
         // Reset dialog size
         settingsDialog.style.maxWidth = '500px';
         document.getElementById('progressStepDetail').textContent = '';
     }
     
-    // Update the progress bar
+    // Update progress bar and text
     function updateProgress(value, text, details) {
         if (!progressContainer) return;
         
-        // Make sure dialog is visible
         settingsDialog.style.display = 'block';
         progressContainer.style.display = 'block';
         progressBar.value = value;
+        if (text) progressText.textContent = text;
         
-        if (text) {
-            progressText.textContent = text;
-        }
-        
-        // Show detailed step information if provided
         const detailsElement = document.getElementById('progressStepDetail');
-        if (details && detailsElement) {
-            detailsElement.textContent = details;
-        }
+        if (details && detailsElement) detailsElement.textContent = details;
         
+        // Auto-close on completion
         if (value >= 100) {
-            // Show success message before closing
+            // Show success message
             progressText.textContent = 'PDF generated successfully!';
             detailsElement.textContent = 'Your download should begin automatically.';
             
@@ -379,12 +440,14 @@ const UIManager = (function() {
             setTimeout(() => {
                 resetDialogToSettingsMode();
                 settingsDialog.style.display = 'none';
+                removeOverlay();
             }, 3000);
         }
     }
     
     return {
         initialize,
-        updateProgress
+        updateProgress,
+        adjustButtonPosition
     };
 })();

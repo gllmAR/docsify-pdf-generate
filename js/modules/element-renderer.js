@@ -119,11 +119,30 @@ const ElementRendererModule = (function() {
         const margin = context.margin || 10;
         let { yPosition, currentPage } = context;
         
-        const fontSize = 24 - (element.level * 2);
-        const fontWeight = element.level <= 2 ? 'bold' : 'normal';
+        // Get theme settings if available
+        let headerStyle = {};
+        if (typeof ThemeManager !== 'undefined') {
+            const theme = ThemeManager.getCurrentTheme();
+            headerStyle = theme.elements.header[`h${element.level}`] || {};
+        }
+        
+        // Apply theme settings or fallback to defaults
+        const fontSize = headerStyle.fontSize || (24 - (element.level * 2));
+        const fontWeight = headerStyle.fontWeight || (element.level <= 2 ? 'bold' : 'normal');
         
         doc.setFont('Helvetica', fontWeight);
         doc.setFontSize(fontSize);
+        
+        // Apply header color from theme if available
+        if (headerStyle.color) {
+            doc.setTextColor(headerStyle.color[0], headerStyle.color[1], headerStyle.color[2]);
+        } else {
+            // Fallback to text color
+            if (typeof ThemeManager !== 'undefined') {
+                const textColor = ThemeManager.getCurrentTheme().text.color;
+                doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+            }
+        }
         
         // Calculate proper vertical position for text (baseline adjustment)
         const headerLineHeight = fontSize * 0.5;
@@ -198,11 +217,27 @@ const ElementRendererModule = (function() {
         // Adjust vertical position for next element
         yPosition += fontSize + 5;
         
+        // Reset text color after rendering
+        if (typeof ThemeManager !== 'undefined') {
+            const textColor = ThemeManager.getCurrentTheme().text.color;
+            doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        } else {
+            doc.setTextColor(0, 0, 0); // Default black
+        }
+        
         return { yPosition, currentPage };
     }
     
     // Render element based on its type
     async function renderElement(element, doc, context) {
+        // CRITICAL FIX: Ensure text color is properly set for dark theme before rendering any element
+        if (typeof ThemeManager !== 'undefined' && doc.__currentTheme &&
+            doc.__currentTheme.page.backgroundColor !== 'transparent') {
+            // For dark theme, explicitly ensure correct text color before each element
+            const textColor = doc.__currentTheme.text.color;
+            doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        }
+        
         // Handle specific element types
         switch(element.type) {
             case 'header':
@@ -232,6 +267,9 @@ const ElementRendererModule = (function() {
             case 'formattedText':
                 return renderFormattedText(element, doc, context);
                 
+            case 'htmlContent':
+                return renderHtmlContent(element, doc, context);
+                
             default:
                 return context;
         }
@@ -245,6 +283,12 @@ const ElementRendererModule = (function() {
         
         doc.setFont('Helvetica', 'normal');
         doc.setFontSize(12);
+        
+        // CRITICAL FIX: Ensure text is visible in dark theme
+        if (doc.__currentTheme && doc.__currentTheme.page.backgroundColor !== 'transparent') {
+            const textColor = doc.__currentTheme.text.color;
+            doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        }
         
         // Process text with formatting
         const textLines = doc.splitTextToSize(element.text, contentWidth);
@@ -271,6 +315,9 @@ const ElementRendererModule = (function() {
         
         doc.setFontSize(12);
         
+        // Track counters for each level of ordered list
+        const levelCounters = {};
+        
         // Loop through each list item
         for (let j = 0; j < element.items.length; j++) {
             const item = element.items[j];
@@ -283,27 +330,52 @@ const ElementRendererModule = (function() {
                 yPosition = margin;
             }
             
-            // Add extra debugging for links
-            if (item.hasLink) {
-                Logger.debug(`Processing list item with link: ${item.linkText} -> ${item.linkUrl}`);
-            }
-            
-            // Draw bullet or number and handle links
-            if (element.listType === 'ul') {
-                doc.text('•', itemIndent, yPosition);
-                doc.text(item.text, itemIndent + 5, yPosition);
+            // For ordered lists, handle numbering with proper nesting
+            if (element.listType === 'ol') {
+                // Initialize counter for this level if needed (starting at the item's original number if available)
+                if (j === 0 || element.items[j-1].level !== item.level) {
+                    // If the item has a specified number, use it as the starting point
+                    if (item.originalNumber !== undefined) {
+                        levelCounters[item.level] = item.originalNumber;
+                    } else {
+                        levelCounters[item.level] = 1; // Otherwise start at 1
+                    }
+                } else {
+                    // Increment counter for this level
+                    levelCounters[item.level]++;
+                }
                 
-                // Add link if this item has one
-                if (item.hasLink && item.linkUrl && item.linkText) {
-                    renderListItemLink(doc, item, itemIndent + 5, yPosition, headerPageMap);
+                // Get the current number for this item
+                const itemNumber = levelCounters[item.level];
+                
+                // Draw the number
+                doc.text(`${itemNumber}.`, itemIndent, yPosition);
+                
+                // Handle formatted text rendering if available
+                if (item.hasFormatting && item.formattedSegments) {
+                    renderFormattedListItem(doc, item, itemIndent + 7, yPosition);
+                } else {
+                    doc.text(item.text, itemIndent + 7, yPosition);
+                    
+                    // Add link if this item has one
+                    if (item.hasLink && item.linkUrl && item.linkText) {
+                        renderListItemLink(doc, item, itemIndent + 7, yPosition, headerPageMap); 
+                    }
                 }
             } else {
-                doc.text(`${j+1}.`, itemIndent, yPosition);
-                doc.text(item.text, itemIndent + 7, yPosition);
+                // For unordered lists, just use bullets
+                doc.text('•', itemIndent, yPosition);
                 
-                // Add link if this item has one
-                if (item.hasLink && item.linkUrl && item.linkText) {
-                    renderListItemLink(doc, item, itemIndent + 7, yPosition, headerPageMap); 
+                // Handle formatted text rendering if available
+                if (item.hasFormatting && item.formattedSegments) {
+                    renderFormattedListItem(doc, item, itemIndent + 5, yPosition);
+                } else {
+                    doc.text(item.text, itemIndent + 5, yPosition);
+                    
+                    // Add link if this item has one
+                    if (item.hasLink && item.linkUrl && item.linkText) {
+                        renderListItemLink(doc, item, itemIndent + 5, yPosition, headerPageMap);
+                    }
                 }
             }
             
@@ -354,6 +426,54 @@ const ElementRendererModule = (function() {
         } else {
             // External link
             doc.link(xPos, yPos - 7, linkWidth, 10, { url: item.linkUrl });
+        }
+    }
+    
+    // Helper function to render formatted text in list items
+    function renderFormattedListItem(doc, item, xPos, yPos) {
+        let currXPos = xPos;
+        
+        // Apply formatting to each segment
+        item.formattedSegments.forEach(segment => {
+            // Set font style based on format
+            switch(segment.format) {
+                case 'bold':
+                    doc.setFont('Helvetica', 'bold');
+                    break;
+                case 'italic':
+                    doc.setFont('Helvetica', 'italic');
+                    break;
+                case 'bolditalic':
+                    doc.setFont('Helvetica', 'bolditalic');
+                    break;
+                case 'strikethrough':
+                    // We'll handle strikethrough separately
+                    doc.setFont('Helvetica', 'normal');
+                    break;
+                default:
+                    doc.setFont('Helvetica', 'normal');
+            }
+            
+            // Draw text segment
+            doc.text(segment.text, currXPos, yPos);
+            
+            // Add strikethrough line if needed
+            if (segment.format === 'strikethrough') {
+                const textWidth = doc.getStringUnitWidth(segment.text) * doc.getFontSize() / doc.internal.scaleFactor;
+                doc.line(currXPos, yPos - 2, currXPos + textWidth, yPos - 2);
+            }
+            
+            // Move x position for next segment
+            const textWidth = doc.getStringUnitWidth(segment.text) * doc.getFontSize() / doc.internal.scaleFactor;
+            currXPos += textWidth;
+        });
+        
+        // Reset font styling
+        doc.setFont('Helvetica', 'normal');
+        
+        // Add link if this item has one
+        if (item.hasLink && item.linkUrl && item.linkText) {
+            renderListItemLink(doc, item, xPos, yPos, headerPageMap);
         }
     }
     
@@ -557,6 +677,12 @@ const ElementRendererModule = (function() {
     function renderFormattedText(element, doc, context) {
         if (!element.segments || element.segments.length === 0) return context;
         
+        // Get theme text color for resetting after segments
+        let themeTextColor = [0, 0, 0]; // Default black
+        if (typeof ThemeManager !== 'undefined') {
+            themeTextColor = ThemeManager.getCurrentTheme().text.color;
+        }
+        
         const { pageWidth, contentWidth, alignment, headerPageMap } = context;
         const margin = context.margin || 10;
         let { yPosition } = context;
@@ -672,6 +798,9 @@ const ElementRendererModule = (function() {
             yPosition += lineHeight + 3;
         }
         
+        // Reset to theme text color
+        doc.setTextColor(themeTextColor[0], themeTextColor[1], themeTextColor[2]);
+        
         return { yPosition };
     }
     
@@ -739,9 +868,21 @@ const ElementRendererModule = (function() {
         const margin = context.margin || 10;
         let { yPosition, currentPage } = context;
         
-        // Set up code block styling
-        doc.setFillColor(240, 240, 240);
-        doc.setDrawColor(200, 200, 200);
+        // Get theme settings if available
+        let codeStyle = { 
+            backgroundColor: [240, 240, 240],
+            borderColor: [200, 200, 200],
+            color: [0, 0, 0]
+        };
+        
+        if (typeof ThemeManager !== 'undefined') {
+            const theme = ThemeManager.getCurrentTheme();
+            codeStyle = theme.elements.codeBlock || codeStyle;
+        }
+        
+        // Set up code block styling with theme colors
+        doc.setFillColor(codeStyle.backgroundColor[0], codeStyle.backgroundColor[1], codeStyle.backgroundColor[2]);
+        doc.setDrawColor(codeStyle.borderColor[0], codeStyle.borderColor[1], codeStyle.borderColor[2]);
         
         // Calculate height needed for code block
         doc.setFontSize(10);
@@ -758,11 +899,18 @@ const ElementRendererModule = (function() {
         // Draw code block background
         doc.rect(margin, yPosition, contentWidth, codeBlockHeight, 'FD');
         
-        // Draw code with monospace font
+        // Draw code with monospace font and theme colors
         doc.setFont('Courier', 'normal');
-        doc.setTextColor(0, 0, 0);
+        doc.setTextColor(codeStyle.color[0], codeStyle.color[1], codeStyle.color[2]);
         doc.text(codeLines, margin + 5, yPosition + 7);
-        doc.setFont('Helvetica', 'normal');
+        
+        // Reset text color
+        if (typeof ThemeManager !== 'undefined') {
+            const textColor = ThemeManager.getCurrentTheme().text.color;
+            doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        } else {
+            doc.setTextColor(0, 0, 0);
+        }
         
         yPosition += codeBlockHeight + 5;
         
@@ -860,6 +1008,40 @@ const ElementRendererModule = (function() {
             Logger.error('Error rendering table:', error);
             return { yPosition: context.yPosition + 10 }; // Add some space even if table fails
         }
+    }
+    
+    // Render HTML content
+    function renderHtmlContent(element, doc, context) {
+        const { pageWidth, contentWidth, alignment } = context;
+        const margin = context.margin || 10;
+        let { yPosition } = context;
+        
+        // Apply HTML styling
+        HtmlParser.applyHtmlStyling(doc, element);
+        
+        // Process each segment in the HTML content
+        element.segments.forEach(segment => {
+            // Set font size
+            doc.setFontSize(12);
+            
+            // Split text into lines to handle wrapping
+            const textLines = doc.splitTextToSize(segment.text, contentWidth);
+            
+            // Render the text
+            if (alignment === 'center') {
+                doc.text(textLines, pageWidth / 2, yPosition, { align: 'center' });
+            } else {
+                doc.text(textLines, margin, yPosition);
+            }
+            
+            // Update position based on number of lines
+            yPosition += (textLines.length * 5) + 3;
+        });
+        
+        // Reset styling to defaults
+        HtmlParser.resetStyling(doc);
+        
+        return { yPosition };
     }
     
     // Helper functions

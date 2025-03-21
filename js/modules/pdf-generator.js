@@ -61,6 +61,9 @@ const PDFGenerator = (function() {
                 hotfixes: ["px_scaling"]
             });
             
+            // Add enhanced line drawing for strikethrough support
+            enhanceStrikethroughSupport(doc);
+            
             // Set PDF version for compatibility
             doc.internal.events.subscribe('putCatalog', function() {
                 const pdfVersion = parseFloat(options.pdfVersion) || 1.4;
@@ -69,6 +72,31 @@ const PDFGenerator = (function() {
             
             // Enable proper font embedding
             doc.setFont('Helvetica', 'normal', 'normal');
+            
+            // Set theme if available
+            let isDarkTheme = false;
+            if (typeof ThemeManager !== 'undefined') {
+                // Apply selected theme
+                if (options.theme) {
+                    ThemeManager.setTheme(options.theme);
+                }
+                
+                const currentTheme = ThemeManager.getCurrentTheme();
+                
+                // Determine if this is a dark theme
+                isDarkTheme = currentTheme.page.backgroundColor !== 'transparent';
+                
+                if (isDarkTheme) {
+                    Logger.info(`Using DARK theme with custom background: RGB(${currentTheme.page.backgroundColor.join(',')})`);
+                    Logger.info(`Theme text FORCED to white: RGB(${currentTheme.text.color.join(',')})`);
+                }
+                
+                // Apply theme to document
+                ThemeManager.applyThemeToPdf(doc);
+                
+                // CRITICAL: Store is-dark flag directly on document for access in all methods
+                doc.__isDarkTheme = isDarkTheme;
+            }
             
             let content;
             try {
@@ -117,6 +145,12 @@ const PDFGenerator = (function() {
             // Process content elements
             let alignment = 'left'; // Default alignment
             
+            // IMPORTANT: Ensure text color is correct before starting content rendering
+            if (typeof ThemeManager !== 'undefined') {
+                const textColor = ThemeManager.getCurrentTheme().text.color;
+                doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+            }
+            
             for (let i = 0; i < parsedContent.length; i++) {
                 const element = parsedContent[i];
                 const progress = 20 + (i / parsedContent.length * 70); // Progress from 20% to 90%
@@ -152,6 +186,12 @@ const PDFGenerator = (function() {
                     yPosition = margin;
                 }
                 
+                // Ensure text color is maintained between elements for dark theme
+                if (isDarkTheme) {
+                    const textColor = ThemeManager.getCurrentTheme().text.color;
+                    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+                }
+                
                 // Render the element
                 const renderResult = await ElementRenderer.renderElement(element, doc, {
                     pageWidth,
@@ -175,12 +215,36 @@ const PDFGenerator = (function() {
             
             UIManager.updateProgress(95, 'Finalizing PDF...', 'Adding page numbers and metadata');
             
-            // Add footer with page numbers
+            // Get current theme for consistent styling
+            let themeTextColor = [0, 0, 0]; // Default black
+            if (typeof ThemeManager !== 'undefined') {
+                themeTextColor = ThemeManager.getCurrentTheme().text.color;
+            }
+            
+            // Final application of theme to ensure all pages have correct background
+            if (typeof ThemeManager !== 'undefined') {
+                ThemeManager.finalizeThemeApplication(doc);
+            }
+            
+            // Add footer with page numbers - using theme colors
             const totalPages = doc.internal.getNumberOfPages();
             for (let i = 1; i <= totalPages; i++) {
                 doc.setPage(i);
                 doc.setFontSize(10);
-                doc.setTextColor(100, 100, 100);
+                
+                // Always use theme color for page numbers - critical for dark theme
+                if (typeof ThemeManager !== 'undefined') {
+                    const textColor = ThemeManager.getCurrentTheme().text.color;
+                    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+                } else {
+                    // Use appropriate default based on isDarkTheme
+                    if (isDarkTheme) {
+                        doc.setTextColor(255, 255, 255); // White for dark theme
+                    } else {
+                        doc.setTextColor(100, 100, 100); // Gray for light theme
+                    }
+                }
+                
                 doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 5, { align: 'center' });
             }
             
@@ -211,6 +275,18 @@ const PDFGenerator = (function() {
         }
     }
     
+    // Add enhanced strikethrough support
+    function enhanceStrikethroughSupport(doc) {
+        // Add helper method for drawing line with custom width
+        doc.drawStrikethrough = function(x, y, width, thickness = 0.5) {
+            const originalLineWidth = this.getLineWidth();
+            this.setLineWidth(thickness);
+            this.line(x, y, x + width, y);
+            this.setLineWidth(originalLineWidth);
+            return this;
+        };
+    }
+
     // Debug PDF generation - just parse and log
     function debugPDF(options) {
         generatePDF(options, true);
