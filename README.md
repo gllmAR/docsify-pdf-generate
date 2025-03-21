@@ -17,6 +17,9 @@ This document is created to test various Markdown features and their support whe
 - [Page Breaks](#page-breaks)
 - [Inline HTML](#inline-html)
 
+
+[Inline HTML](#inline-html)
+
 ## Headings
 
 # H1 Heading
@@ -39,15 +42,17 @@ This is a simple paragraph. Lorem ipsum dolor sit amet, consectetur adipiscing e
 ![High-Res Image 7](https://placehold.co/3840x2160.png)
 
 This is another paragraph with a  
+
 line break.
+
+![High-Res Image 8](https://placehold.co/120x240.png)  <!-- Portrait -->  
 
 ## Emphasis
 
-*Italic*  
-![High-Res Image 8](https://placehold.co/120x240.png)  <!-- Portrait -->  
-**Bold**  
-***Bold and Italic***  
-~~Strikethrough~~
+- *Italic*  
+- **Bold**  
+- ***Bold and Italic***  
+- ~~Strikethrough~~
 
 ## Lists
 
@@ -57,7 +62,7 @@ line break.
   - Subitem 1
   - Subitem 2
 - Item 2
-![High-Res Image 9](https://placehold.co/2400x1200.png)
+- ![High-Res Image 9](https://placehold.co/2400x1200.png)
 - Item 3
 
 ### Ordered List
@@ -66,7 +71,7 @@ line break.
 2. Second item
    1. Subitem 1
    2. Subitem 2
-![High-Res Image 10](https://placehold.co/1920x1080.png)
+   3. ![High-Res Image 10](https://placehold.co/1920x1080.png)
 3. Third item
 
 ## Links
@@ -74,12 +79,13 @@ line break.
 [Docsify GitHub](https://github.com/docsifyjs/docsify)  
 [Relative Link](README.md)
 
-![High-Res Image 11](https://placehold.co/2880x1800.png)
+
 
 ## Images
 
-![Docsify Logo](https://docsify.js.org/_media/icon.svg)  
-![Local Image](./path/to/local-image.png)
+* ![High-Res Image 11](https://placehold.co/2880x1800.png)
+* ![Docsify Logo](https://docsify.js.org/_media/icon.svg)  
+* ![Local Image](./path/to/local-image.png)
 
 ## Tables
 
@@ -198,6 +204,8 @@ Insert a horizontal line:
 
 <!-- \hline -->
 
+
+<!-- \newpage -->
 ## LaTeX Command Reference
 
 | Command | Description | Example |
