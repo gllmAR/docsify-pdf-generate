@@ -15,7 +15,7 @@ const LightTheme = {
     text: {
         color: [0, 0, 0], // Black text
         linkColor: [41, 182, 246], // Light blue for links
-        headingColor: [25, 118, 210], // Darker blue for headings
+        headingColor: [0, 0, 0], // Darker blue for headings
         codeColor: [33, 33, 33] // Dark gray for code
     },
     

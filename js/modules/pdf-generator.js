@@ -58,11 +58,27 @@ const PDFGenerator = (function() {
                 precision: 16,
                 putOnlyUsedFonts: true,
                 floatPrecision: 16,
-                hotfixes: ["px_scaling"]
+                hotfixes: ["px_scaling"],
+                fontFaces: [],
+                useUnicode: false // Disable Unicode support
             });
+            
+            // Skip loading Unicode-compatible fonts - removed for simplicity
+            
+            // Initialize UTF-8 support - simple version only
+            if (typeof UTF8Support !== 'undefined') {
+                Logger.debug('Initializing basic text support');
+                const utf8Initialized = UTF8Support.initialize(window.jspdf);
+                if (!utf8Initialized) {
+                    Logger.warn('Text support initialization had issues');
+                }
+            }
             
             // Add enhanced line drawing for strikethrough support
             enhanceStrikethroughSupport(doc);
+            
+            // Add basic character handling
+            enhanceBasicTextSupport(doc);
             
             // Set PDF version for compatibility
             doc.internal.events.subscribe('putCatalog', function() {
@@ -213,6 +229,41 @@ const PDFGenerator = (function() {
                 }
             }
             
+            // Enhanced header mapping for more robust links
+            const enhancedHeaderMapping = (headerMap, parsedContent) => {
+                // Pre-process all headers to create multiple mapping variants
+                parsedContent.forEach(element => {
+                    if (element.type === 'header' && element.id) {
+                        const page = headerMap.get(element.id);
+                        if (page) {
+                            // Create standard variations of header IDs
+                            const variations = [
+                                element.id,
+                                '#' + element.id,
+                                element.text.toLowerCase(),
+                                element.text.toLowerCase().replace(/\s+/g, '-'),
+                                element.text.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, '-'),
+                                element.text.toLowerCase().replace(/[^a-z0-9]/g, '')
+                            ];
+                            
+                            // Add all variations to the map
+                            variations.forEach(variant => {
+                                if (!headerMap.has(variant)) {
+                                    headerMap.set(variant, page);
+                                    Logger.debug(`Added header variant: "${variant}" → Page ${page}`);
+                                }
+                            });
+                        }
+                    }
+                });
+                
+                // Log a summary of all available link targets
+                Logger.debug(`Enhanced header map now contains ${headerMap.size} entries`);
+            };
+
+            // After processing all elements, enhance the header mapping
+            enhancedHeaderMapping(headerPageMap, parsedContent);
+
             UIManager.updateProgress(95, 'Finalizing PDF...', 'Adding page numbers and metadata');
             
             // Get current theme for consistent styling
@@ -245,13 +296,17 @@ const PDFGenerator = (function() {
                     }
                 }
                 
-                doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 5, { align: 'center' });
+                // Add page numbers at the bottom center of each page
+                const pageNumberText = `Page ${i} of ${totalPages}`;
+                const pageWidth = doc.internal.pageSize.getWidth();
+                doc.text(pageNumberText, pageWidth / 2, pageHeight - 10, { align: 'center' });
+                
+                // Ensure we restore text color after adding page numbers
+                doc.setTextColor(themeTextColor[0], themeTextColor[1], themeTextColor[2]);
             }
             
-            UIManager.updateProgress(98, 'Saving PDF...', 'Preparing file for download');
-            
             // Debug: Dump document structure information
-            Logger.debug(`Document has ${doc.internal.getNumberOfPages()} pages and ${headerPageMap.size} mapped headers`);
+            Logger.debug(`Document has ${totalPages} pages and ${headerPageMap.size} mapped headers`);
             Logger.debug(`Link targets available: ${Array.from(headerPageMap.keys()).join(', ')}`);
             
             // Finalize document with proper metadata
@@ -285,6 +340,75 @@ const PDFGenerator = (function() {
             this.setLineWidth(originalLineWidth);
             return this;
         };
+    }
+    
+    // Enhance basic text support (simplified version without emoji support)
+    function enhanceBasicTextSupport(doc) {
+        // Add a flag to track if we've already processed a text value
+        doc.__processedTexts = new Set();
+        
+        // Override the text method to handle basic character handling
+        const originalText = doc.text;
+        doc.text = function(text, x, y, options) {
+            // Pre-process text for better compatibility
+            if (Array.isArray(text)) {
+                return originalText.call(this, 
+                    text.map(t => normalizeText(t, this)),
+                    x, y, options);
+            } else {
+                return originalText.call(this, normalizeText(text, this), x, y, options);
+            }
+        };
+        
+        // Track font changes
+        const originalSetFont = doc.setFont;
+        doc.setFont = function(family, style, weight) {
+            const result = originalSetFont.call(this, family, style, weight);
+            // Store current font info for basic handling
+            this.__currentFont = {
+                family: family,
+                style: style,
+                encoding: family === 'courier' ? 'Standard' : 'WinAnsiEncoding'
+            };
+            return result;
+        };
+        
+        // Helper to normalize text for better display
+        function normalizeText(text, docObj) {
+            if (typeof text !== 'string') return text;
+            
+            // Skip if already processed this exact string
+            const textKey = `${text}`;
+            if (docObj.__processedTexts.has(textKey)) return text;
+            
+            // Add to processed set
+            docObj.__processedTexts.add(textKey);
+            
+            try {
+                // Use basic character translations for problematic characters
+                return text
+                    // Replace emoji with simple placeholder
+                    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '•')
+                    // Convert non-ASCII chars to their closest ASCII equivalent
+                    .replace(/[^\x00-\x7F]/g, char => {
+                        // Return common equivalents for special characters
+                        const charCode = char.charCodeAt(0);
+                        // Basic accented letters
+                        if (charCode >= 192 && charCode <= 214) return 'A'; // À-Ö
+                        if (charCode >= 216 && charCode <= 222) return 'O'; // Ø-Þ
+                        if (charCode >= 224 && charCode <= 246) return 'a'; // à-ö
+                        if (charCode >= 248 && charCode <= 254) return 'o'; // ø-þ
+                        // Common symbols
+                        if (charCode >= 8592 && charCode <= 8703) return '-'; // Arrows and math
+                        if (charCode >= 8704 && charCode <= 8959) return '+'; // More math
+                        if (charCode >= 9632 && charCode <= 9727) return '*'; // Shapes
+                        return '.'; // Fallback for other chars
+                    });
+            } catch (e) {
+                Logger.error("Error normalizing text:", e);
+                return text;
+            }
+        }
     }
 
     // Debug PDF generation - just parse and log

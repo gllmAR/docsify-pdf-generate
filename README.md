@@ -16,6 +16,8 @@ This document is created to test various Markdown features and their support whe
 - [Horizontal Rule](#horizontal-rule)
 - [Page Breaks](#page-breaks)
 - [Inline HTML](#inline-html)
+- [Text Alignment](#text-alignment)
+- [UTF-8 and Emoji Support](#utf-8-and-emoji-support)
 
 
 [Inline HTML](#inline-html)
@@ -198,6 +200,24 @@ Center-align the following content:
 
 This text will be centered.
 
+Left-align the text (default):
+
+<!-- \raggedright -->
+
+This text will be left-aligned.
+
+Right-align the text:
+
+<!-- \flushright -->
+
+This text will be right-aligned.
+
+Justified text:
+
+<!-- \justify -->
+
+This text will be justified, with more even spacing between words to create straight edges on both the left and right.
+
 ### Horizontal Lines
 
 Insert a horizontal line:
@@ -206,6 +226,78 @@ Insert a horizontal line:
 
 
 <!-- \newpage -->
+
+## Text Alignment Examples
+
+Default text is left-aligned like this paragraph. This is a longer paragraph to demonstrate the alignment. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+
+<!-- \centering -->
+
+This paragraph should be center-aligned. This is a longer paragraph to demonstrate the alignment. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+
+<!-- \flushright -->
+
+This paragraph should be right-aligned. This is a longer paragraph to demonstrate the alignment. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+
+<!-- \raggedright -->
+
+This paragraph should be back to left-aligned (the default). This is a longer paragraph to demonstrate the alignment. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+
+<!-- \justify -->
+
+This paragraph should be justified. This is a longer paragraph to demonstrate the alignment. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+
+## UTF-8 and Emoji Support
+
+### Emoji Tests
+
+Here are some common emojis to test PDF rendering support:
+
+😀 😃 😄 😁 😆 😅 😂 🤣 🥲 ☺️ 😊 
+
+🥰 😍 🤩 😘 😗 😚 😙 🥲 😋 😛 
+
+🚗 🚕 🚙 🚌 🚎 🏎 🚓 🚑 🚒 🚐 🚚 
+
+🪻 🪷 🌸 💮 🏵️ 🌹 🥀 🌺 🌻 🌼 🌷 
+
+### Special Character Tests
+
+Unicode symbols and special characters:
+• ♠ ♣ ♥ ♦ ★ ☆ ☺ ☻
+• © ® ™ ℠ § ¶ † ‡
+• ½ ⅓ ¼ ⅕ ⅙ ⅐ ⅛ ⅑ ⅒
+• α β γ δ ε ζ η θ
+• Á É Í Ó Ú Ý á é í ó ú ý
+• Ç Ñ Ü ç ñ ü
+
+### Complex Scripts
+
+Arabic: السلام عليكم ومرحبا بك
+
+Hebrew: שלום וברוכים הבאים
+
+Thai: สวัสดีและยินดีต้อนรับ
+
+Japanese: こんにちは、ようこそ
+
+Chinese: 你好，欢迎
+
+Korean: 안녕하세요, 환영합니다
+
+Russian: Здравствуйте и добро пожаловать
+
+Greek: Γεια σας και καλώς ήρθατε
+
+Devanagari (Hindi): नमस्ते और आपका स्वागत है
+
+### Mathematical Symbols
+
+Math expressions:
+• ∞ ∫ ∑ ∏ √ ∂ ∇ ∈ ∉ 
+• ≠ ≈ ≡ ≤ ≥ ⊂ ⊃ ⊆ ⊇
+• ∧ ∨ ∀ ∃ ∄ ∴ ∵
+
 ## LaTeX Command Reference
 
 | Command | Description | Example |
@@ -217,6 +309,9 @@ Insert a horizontal line:
 | `\textit{text}` | Italic text | `<!-- \textit{italic text} -->` |
 | `\textcolor{color}{text}` | Colored text | `<!-- \textcolor{red}{colored text} -->` |
 | `\centering` | Center align text | `<!-- \centering -->` |
+| `\raggedright` or `\flushleft` | Left align text | `<!-- \raggedright -->` |
+| `\raggedleft` or `\flushright` | Right align text | `<!-- \flushright -->` |
+| `\justify` | Justify text | `<!-- \justify -->` |
 
 ## Inline HTML
 

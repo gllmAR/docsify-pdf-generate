@@ -44,6 +44,28 @@ const LinkUtils = (function() {
             return headerPageMap.get(normalizedId);
         }
         
+        // Try kebab-case version for anchor links (common in markdown docs)
+        // This converts "Heading Text" to "heading-text"
+        const kebabCaseId = headerId.replace('#', '')
+            .toLowerCase()
+            .replace(/[^\w\s-]/g, '') // Remove special chars
+            .replace(/\s+/g, '-'); // Replace spaces with dashes
+        
+        if (headerPageMap.has(kebabCaseId)) {
+            Logger.debug(`Found kebab-case match: "${headerId}" → "${kebabCaseId}" → Page ${headerPageMap.get(kebabCaseId)}`);
+            return headerPageMap.get(kebabCaseId);
+        }
+        
+        // Handle common variations of kebab case (with or without special chars)
+        const simplifiedId = headerId.replace(/[^a-z0-9]/gi, '').toLowerCase();
+        for (const [key, value] of headerPageMap.entries()) {
+            const simplifiedKey = key.replace(/[^a-z0-9]/gi, '').toLowerCase();
+            if (simplifiedKey === simplifiedId) {
+                Logger.debug(`Found simplified match: "${headerId}" ~ "${key}" → Page ${value}`);
+                return value;
+            }
+        }
+        
         // Last resort: try looser matching
         for (const [key, value] of headerPageMap.entries()) {
             const cleanKey = key.replace(/[#-]/g, '').toLowerCase();
@@ -59,7 +81,31 @@ const LinkUtils = (function() {
         return null;
     }
     
+    // Generate a standardized ID from heading text (to match what Markdown processors typically do)
+    function generateIdFromText(text) {
+        if (!text) return '';
+        
+        return text
+            .toLowerCase()
+            .replace(/[^\w\s-]/g, '') // Remove special characters
+            .replace(/\s+/g, '-')    // Replace spaces with hyphens
+            .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
+    }
+    
+    // Process a Markdown link to extract its URL and text
+    function processMarkdownLink(linkText) {
+        const linkMatch = linkText.match(/\[([^\]]+)\]\(([^)]+)\)/);
+        if (!linkMatch) return null;
+        
+        return {
+            text: linkMatch[1],
+            url: linkMatch[2]
+        };
+    }
+    
     return {
-        findHeaderPage
+        findHeaderPage,
+        generateIdFromText,
+        processMarkdownLink
     };
 })();

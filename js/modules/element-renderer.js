@@ -130,7 +130,14 @@ const ElementRendererModule = (function() {
         const fontSize = headerStyle.fontSize || (24 - (element.level * 2));
         const fontWeight = headerStyle.fontWeight || (element.level <= 2 ? 'bold' : 'normal');
         
-        doc.setFont('Helvetica', fontWeight);
+        // Use Unicode font if available, otherwise fallback
+        const isUsingUnicodeFont = doc.__currentFont && doc.__currentFont.encoding === 'Identity-H';
+        if (isUsingUnicodeFont) {
+            doc.setFont("NotoSans", fontWeight);
+        } else {
+            doc.setFont('Helvetica', fontWeight);
+        }
+        
         doc.setFontSize(fontSize);
         
         // Apply header color from theme if available
@@ -196,13 +203,6 @@ const ElementRendererModule = (function() {
             
             // Also store with hash prefix for direct hash lookups
             headerPageMap.set('#' + element.id, currentPage);
-        }
-
-        // Store the header ID in multiple formats to ensure link matching
-        if (element.id) {
-            // Store with and without hash
-            headerPageMap.set(element.id, currentPage);
-            headerPageMap.set('#' + element.id, currentPage);
             
             // Store with dash-separated format (common with TOC links)
             const dashFormat = element.text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');
@@ -242,7 +242,6 @@ const ElementRendererModule = (function() {
         switch(element.type) {
             case 'header':
                 return renderHeader(element, doc, context);
-                
             case 'text':
                 return renderText(element, doc, context);
                 
@@ -275,33 +274,52 @@ const ElementRendererModule = (function() {
         }
     }
     
-    // Render plain text
+    // Render plain text with simplified handling
     function renderText(element, doc, context) {
         const { pageWidth, contentWidth, alignment } = context;
         const margin = context.margin || 10;
         let { yPosition } = context;
         
+        // Set fonts
         doc.setFont('Helvetica', 'normal');
         doc.setFontSize(12);
         
-        // CRITICAL FIX: Ensure text is visible in dark theme
+        // Ensure text is visible in dark theme
         if (doc.__currentTheme && doc.__currentTheme.page.backgroundColor !== 'transparent') {
             const textColor = doc.__currentTheme.text.color;
             doc.setTextColor(textColor[0], textColor[1], textColor[2]);
         }
         
-        // Process text with formatting
-        const textLines = doc.splitTextToSize(element.text, contentWidth);
+        // Process text (normalization happens in the doc.text method override)
+        let processedText = element.text;
+        
+        // Use a smaller width for text wrapping to prevent edge cutting
+        const safeWidth = contentWidth * 0.95; // 95% of available width
+        const textLines = doc.splitTextToSize(processedText, safeWidth);
         
         // Apply current alignment
+        const textOptions = {};
         if (alignment === 'center') {
-            doc.text(textLines, pageWidth / 2, yPosition, { align: 'center' });
+            textOptions.align = 'center';
+            doc.text(textLines, pageWidth / 2, yPosition, textOptions);
+        } else if (alignment === 'right') {
+            textOptions.align = 'right';
+            doc.text(textLines, pageWidth - margin, yPosition, textOptions);
+        } else if (alignment === 'justify') {
+            // Basic justified text
+            const justifiedLines = textLines.map(line => {
+                if (line.length < 30) return line;
+                return line.replace(/\s+/g, '  ');
+            });
+            doc.text(justifiedLines, margin, yPosition);
         } else {
+            // Default left alignment
             doc.text(textLines, margin, yPosition);
         }
         
-        // Move position based on the number of lines
-        yPosition += (textLines.length * 5) + 3;
+        // Increase line spacing for better readability
+        const lineHeight = 6;
+        yPosition += (textLines.length * lineHeight) + 4;
         
         return { yPosition };
     }
@@ -312,6 +330,9 @@ const ElementRendererModule = (function() {
         const margin = context.margin || 10;
         let { yPosition, currentPage } = context;
         const listIndent = 5;
+        
+        // Check if this is a TOC and process it specially
+        const isTOC = detectAndProcessTOC(element, doc, context);
         
         doc.setFontSize(12);
         
@@ -332,16 +353,36 @@ const ElementRendererModule = (function() {
             
             // For ordered lists, handle numbering with proper nesting
             if (element.listType === 'ol') {
-                // Initialize counter for this level if needed (starting at the item's original number if available)
+                // Initialize or update counter for this level
+                // FIXED: Reset counters for higher nesting levels when level changes
                 if (j === 0 || element.items[j-1].level !== item.level) {
-                    // If the item has a specified number, use it as the starting point
-                    if (item.originalNumber !== undefined) {
-                        levelCounters[item.level] = item.originalNumber;
+                    // Reset all deeper level counters when the level changes
+                    if (j > 0) {
+                        const prevLevel = element.items[j-1].level;
+                        if (item.level > prevLevel) {
+                            // Going deeper - reset the counter for this new level
+                            levelCounters[item.level] = item.originalNumber || 1;
+                        } else {
+                            // Going back to a less deep level - preserve counters
+                            // but clear out any deeper levels
+                            for (let l = item.level + 1; l <= 6; l++) {
+                                delete levelCounters[l];
+                            }
+                            
+                            // If we're returning to this level for the first time, initialize it
+                            if (levelCounters[item.level] === undefined) {
+                                levelCounters[item.level] = item.originalNumber || 1;
+                            } else {
+                                // Otherwise, continue from last count at this level
+                                levelCounters[item.level]++;
+                            }
+                        }
                     } else {
-                        levelCounters[item.level] = 1; // Otherwise start at 1
+                        // First item in the list
+                        levelCounters[item.level] = item.originalNumber || 1;
                     }
                 } else {
-                    // Increment counter for this level
+                    // Same level as previous item - increment counter
                     levelCounters[item.level]++;
                 }
                 
@@ -450,6 +491,17 @@ const ElementRendererModule = (function() {
                     // We'll handle strikethrough separately
                     doc.setFont('Helvetica', 'normal');
                     break;
+                case 'inlinecode':
+                    // FIXED: Use Courier font for inline code
+                    doc.setFont('Courier', 'normal');
+                    doc.setFontSize(10);
+                    
+                    // Add background for inline code in list items
+                    const codeWidth = doc.getStringUnitWidth(segment.text) * doc.getFontSize() / doc.internal.scaleFactor;
+                    const padding = 2;
+                    doc.setFillColor(240, 240, 240);
+                    doc.rect(currXPos - padding, yPos - 4, codeWidth + (padding * 2), 7 + 1, 'F');
+                    break;
                 default:
                     doc.setFont('Helvetica', 'normal');
             }
@@ -460,16 +512,29 @@ const ElementRendererModule = (function() {
             // Add strikethrough line if needed
             if (segment.format === 'strikethrough') {
                 const textWidth = doc.getStringUnitWidth(segment.text) * doc.getFontSize() / doc.internal.scaleFactor;
-                doc.line(currXPos, yPos - 2, currXPos + textWidth, yPos - 2);
+                if (doc.drawStrikethrough) {
+                    doc.drawStrikethrough(currXPos, yPos - 2, textWidth);
+                } else {
+                    doc.line(currXPos, yPos - 2, currXPos + textWidth, yPos - 2);
+                }
             }
             
-            // Move x position for next segment
+            // Move x position for next segment - use current font metrics
             const textWidth = doc.getStringUnitWidth(segment.text) * doc.getFontSize() / doc.internal.scaleFactor;
-            currXPos += textWidth;
+            if (segment.format === 'inlinecode') {
+                // Add padding to advance position correctly
+                currXPos += textWidth + (padding * 2);
+                // Reset font for next segment
+                doc.setFont('Helvetica', 'normal');
+                doc.setFontSize(12);
+            } else {
+                currXPos += textWidth;
+            }
         });
         
         // Reset font styling
         doc.setFont('Helvetica', 'normal');
+        doc.setFontSize(12);
         
         // Add link if this item has one
         if (item.hasLink && item.linkUrl && item.linkText) {
@@ -688,12 +753,12 @@ const ElementRendererModule = (function() {
         let { yPosition } = context;
         
         // Define line height for all text rendering paths
-        const lineHeight = 5;
+        const lineHeight = 6; // Increased from 5 for better readability
         
-        // Use a safer approach for text wrapping - we'll calculate the width first
-        // and create multiple lines if needed
+        // Use a safer approach for text wrapping - reduced width to prevent edge cutting
+        const safeWidth = contentWidth * 0.95; // Use 95% of available width
         const textContent = element.segments.map(s => s.text).join('');
-        const formattedLines = doc.splitTextToSize(textContent, contentWidth);
+        const formattedLines = doc.splitTextToSize(textContent, safeWidth);
         
         // If there are multiple lines, we need to rebuild our segments for each line
         if (formattedLines.length > 1) {
@@ -702,16 +767,25 @@ const ElementRendererModule = (function() {
             
             for (let lineIndex = 0; lineIndex < formattedLines.length; lineIndex++) {
                 // Process each line with proper formatting
-                let lineXPos = alignment === 'center' ? pageWidth / 2 : margin;
+                let lineXPos;
                 const currentLine = formattedLines[lineIndex];
                 
-                // For center alignment, we need the total width of this specific line
+                // Calculate text position based on alignment
                 if (alignment === 'center') {
                     // Calculate width of current line for centered text
                     doc.setFont('Helvetica', 'normal');
                     doc.setFontSize(12);
                     const lineWidth = doc.getStringUnitWidth(currentLine) * doc.getFontSize() / doc.internal.scaleFactor;
                     lineXPos = (pageWidth - lineWidth) / 2;
+                } else if (alignment === 'right') {
+                    // Calculate right alignment position
+                    doc.setFont('Helvetica', 'normal');
+                    doc.setFontSize(12);
+                    const lineWidth = doc.getStringUnitWidth(currentLine) * doc.getFontSize() / doc.internal.scaleFactor;
+                    lineXPos = pageWidth - margin - lineWidth;
+                } else {
+                    // Default left alignment
+                    lineXPos = margin;
                 }
                 
                 // Process the line segments
@@ -724,25 +798,30 @@ const ElementRendererModule = (function() {
             // Update final y position after all lines
             yPosition = lineYPos;
         } else {
-            // Single line case
-            let xPos = alignment === 'center' ? pageWidth / 2 : margin;
+            // Single line case - existing code but updated for right alignment
+            let xPos;
             let yPos = yPosition;
             
-            // Track total width for centering calculations
+            // Track total width for alignment calculations
             let totalWidth = 0;
+            
+            // Calculate total width for alignment
+            element.segments.forEach(segment => {
+                doc.setFont('Helvetica', getFontStyle(segment.format));
+                doc.setFontSize(getFontSize(segment.format));
+                totalWidth += doc.getStringUnitWidth(segment.text) * doc.getFontSize() / doc.internal.scaleFactor;
+            });
+            
+            // Determine starting position based on alignment
             if (alignment === 'center') {
-                // Calculate total width of all segments
-                element.segments.forEach(segment => {
-                    doc.setFont('Helvetica', getFontStyle(segment.format));
-                    doc.setFontSize(getFontSize(segment.format));
-                    totalWidth += doc.getStringUnitWidth(segment.text) * doc.getFontSize() / doc.internal.scaleFactor;
-                });
-                
-                // Adjust starting position for center alignment
                 xPos = (pageWidth - totalWidth) / 2;
+            } else if (alignment === 'right') {
+                xPos = pageWidth - margin - totalWidth;
+            } else {
+                xPos = margin; // Left alignment is default
             }
             
-            // Render each segment
+            // Render each segment - existing handling of segments...
             for (let j = 0; j < element.segments.length; j++) {
                 const segment = element.segments[j];
                 
@@ -750,18 +829,44 @@ const ElementRendererModule = (function() {
                 doc.setFont('Helvetica', getFontStyle(segment.format));
                 doc.setFontSize(getFontSize(segment.format));
                 
-                // Handle inline code separately
+                // Handle inline code separately - FIXED: use correct font metrics
                 if (segment.format === 'inlinecode') {
-                    const codeWidth = doc.getStringUnitWidth(segment.text) * doc.getFontSize() / doc.internal.scaleFactor;
-                    const padding = 2;
-                    doc.setFillColor(240, 240, 240);
-                    doc.rect(xPos - padding, yPos - 4, codeWidth + (padding * 2), lineHeight + 4, 'F');
+                    // Save current font settings
+                    const originalFont = doc.getFont();
+                    
+                    // Switch to Courier for proper width calculation
                     doc.setFont('Courier', 'normal');
+                    doc.setFontSize(10);
+                    
+                    // Calculate width with monospace font metrics
+                    const codeWidth = doc.getStringUnitWidth(segment.text) * doc.getFontSize() / doc.internal.scaleFactor;
+                    
+                    // Add padding scaled to font size
+                    const padding = 2;
+                    const paddedWidth = codeWidth + (padding * 2);
+                    
+                    // Draw background rectangle using monospace measurements
+                    doc.setFillColor(240, 240, 240);
+                    doc.rect(xPos - padding, yPos - 4, paddedWidth, lineHeight + 4, 'F');
+                    
+                    // Draw the text (still with Courier font)
                     doc.setTextColor(0, 0, 0);
+                    doc.text(segment.text, xPos, yPos);
+                    
+                    // Update position using correct width
+                    xPos += paddedWidth;
+                    
+                    // Restore original font
+                    doc.setFont(originalFont.fontName, originalFont.fontStyle);
+                    doc.setFontSize(12);
+                } else {
+                    // Draw the text segment
+                    doc.text(segment.text, xPos, yPos);
+                    
+                    // Update x position for next segment using current font
+                    const textWidth = doc.getStringUnitWidth(segment.text) * doc.getFontSize() / doc.internal.scaleFactor;
+                    xPos += textWidth;
                 }
-                
-                // Draw the text segment
-                doc.text(segment.text, xPos, yPos);
                 
                 // Add link if present
                 if (segment.link) {
@@ -785,17 +890,14 @@ const ElementRendererModule = (function() {
                     }
                 }
                 
-                // Update x position for next segment
-                xPos += doc.getStringUnitWidth(segment.text) * doc.getFontSize() / doc.internal.scaleFactor;
-                
                 // Reset styling
                 doc.setFont('Helvetica', 'normal');
                 doc.setFontSize(12);
                 doc.setTextColor(0, 0, 0);
             }
             
-            // Move to next line
-            yPosition += lineHeight + 3;
+            // Move to next line with better spacing
+            yPosition += lineHeight + 4; // Increased from 3
         }
         
         // Reset to theme text color
@@ -824,15 +926,38 @@ const ElementRendererModule = (function() {
                 
                 // Handle inline code
                 if (segment.format === 'inlinecode') {
+                    // FIXED: Use Courier font for proper width calculation
+                    const originalFont = doc.getFont();
+                    
+                    // Switch to Courier
+                    doc.setFont('Courier', 'normal');
+                    doc.setFontSize(10);
+                    
+                    // Calculate width with monospace font
                     const codeWidth = doc.getStringUnitWidth(textToRender) * doc.getFontSize() / doc.internal.scaleFactor;
                     const padding = 2;
+                    
+                    // Draw background
                     doc.setFillColor(240, 240, 240);
                     doc.rect(xPos - padding, yPos - 4, codeWidth + (padding * 2), 5 + 4, 'F');
-                    doc.setFont('Courier', 'normal');
+                    
+                    // Draw text
+                    doc.text(textToRender, xPos, yPos);
+                    
+                    // Update position
+                    xPos += codeWidth + (padding * 2);
+                    
+                    // Restore original font
+                    doc.setFont(originalFont.fontName, originalFont.fontStyle);
+                    doc.setFontSize(12);
+                } else {
+                    // Draw text
+                    doc.text(textToRender, xPos, yPos);
+                    
+                    // Use correct font for width calculation
+                    const textWidth = doc.getStringUnitWidth(textToRender) * doc.getFontSize() / doc.internal.scaleFactor;
+                    xPos += textWidth;
                 }
-                
-                // Draw text
-                doc.text(textToRender, xPos, yPos);
                 
                 // Add link if present
                 if (segment.link) {
@@ -851,8 +976,7 @@ const ElementRendererModule = (function() {
                     }
                 }
                 
-                // Update position and remaining line content
-                xPos += doc.getStringUnitWidth(textToRender) * doc.getFontSize() / doc.internal.scaleFactor;
+                // Update remaining line content
                 remainingLine = remainingLine.substring(textToRender.length);
             }
             
@@ -1068,6 +1192,31 @@ const ElementRendererModule = (function() {
             default:
                 return 12;
         }
+    }
+
+    // Helper function for detecting and processing a Table of Contents
+    function detectAndProcessTOC(element, doc, context) {
+        // Check if this list matches the pattern of a TOC
+        if (!element || !element.items || element.items.length < 2) {
+            return false;
+        }
+        
+        // Count how many items have links to internal headers
+        let internalLinkCount = 0;
+        for (const item of element.items) {
+            if (item.hasLink && item.linkUrl && item.linkUrl.startsWith('#')) {
+                internalLinkCount++;
+            }
+        }
+        
+        // If more than 80% of items have internal links, it's likely a TOC
+        const tocProbability = internalLinkCount / element.items.length;
+        if (tocProbability > 0.8) {
+            Logger.debug(`Detected Table of Contents with ${internalLinkCount} internal links`);
+            return true;
+        }
+        
+        return false;
     }
     
     return {

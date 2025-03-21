@@ -137,22 +137,31 @@ const MarkdownParser = (function() {
                     currentListType = null;
                 }
                 
-                // Generate a normalized ID for the header that will match TOC links
-                // This uses the same algorithm that Docsify uses for auto IDs
+                // Get raw header text
                 const headerText = headerMatch[2];
+                
+                // Generate multiple ID forms to ensure we can match links 
                 const headerId = headerText.toLowerCase()
                     .replace(/[^\w\s-]/g, '') // Remove special characters
                     .replace(/\s+/g, '-')     // Replace spaces with hyphens
                     .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
                 
+                // Add alternative ID formats for more robust link matching
+                const alternativeIds = [
+                    headerId,
+                    headerText.toLowerCase().replace(/\s+/g, '-'), // Keep special chars
+                    headerText.toLowerCase().replace(/[^a-z0-9]+/g, '-') // More aggressive replacement
+                ];
+                
                 parsedContent.push({
                     type: 'header',
                     level: headerMatch[1].length,
                     text: headerMatch[2],
-                    id: headerId // Normalized ID for linking
+                    id: headerId, // Primary ID
+                    alternativeIds: alternativeIds // Store alternatives for matching
                 });
                 
-                Logger.debug(`Header parsed: "${headerMatch[2]}" → ID: "${headerId}"`);
+                Logger.debug(`Header parsed: "${headerMatch[2]}" → Primary ID: "${headerId}", Alt IDs: ${alternativeIds.join(', ')}`);
                 
                 i++;
                 continue;
@@ -197,7 +206,8 @@ const MarkdownParser = (function() {
                     text: itemText.replace(/\*\*\*(.*?)\*\*\*/g, '$1')
                                  .replace(/\*\*(.*?)\*\*/g, '$1')
                                  .replace(/\*(.*?)\*/g, '$1')
-                                 .replace(/~~(.*?)~~/g, '$1'), // Plain text without markup
+                                 .replace(/~~(.*?)~~/g, '$1')
+                                 .replace(/`([^`]+)`/g, '$1'), // Plain text without markup
                     level: Math.floor(indentLevel / 2),
                     hasFormatting: formattedSegments.length > 0,
                     formattedSegments: formattedSegments
@@ -235,7 +245,8 @@ const MarkdownParser = (function() {
                     text: itemText.replace(/\*\*\*(.*?)\*\*\*/g, '$1')
                                  .replace(/\*\*(.*?)\*\*/g, '$1')
                                  .replace(/\*(.*?)\*/g, '$1')
-                                 .replace(/~~(.*?)~~/g, '$1'), // Plain text without markup
+                                 .replace(/~~(.*?)~~/g, '$1')
+                                 .replace(/`([^`]+)`/g, '$1'), // Plain text without markup
                     level: Math.floor(indentLevel / 2),
                     originalNumber: originalNumber, // Store the original number for proper rendering
                     hasFormatting: formattedSegments.length > 0,
@@ -710,152 +721,206 @@ const MarkdownParser = (function() {
     // Add this new helper function to parse text formatting
     function parseTextFormatting(text) {
         const segments = [];
+        let processingComplete = false;
         
-        // Process Bold and Italic
+        // Process Bold and Italic - preserve processing order
         let remainingText = text;
         
-        // Bold and Italic (***text***)
-        const boldItalicRegex = /\*\*\*(.*?)\*\*\*/g;
-        const boldItalicMatches = [...remainingText.matchAll(boldItalicRegex)];
+        // Process in this specific order for proper nesting:
+        // 1. Bold and Italic (***text***)
+        // 2. Bold (**text**)
+        // 3. Italic (*text*)
+        // 4. Strikethrough (~~text~~)
+        // 5. Inline code (`text`)
         
-        if (boldItalicMatches.length > 0) {
-            let lastIndex = 0;
+        // Bold and Italic (***text***)
+        if (!processingComplete) {
+            const boldItalicRegex = /\*\*\*(.*?)\*\*\*/g;
+            const boldItalicMatches = [...remainingText.matchAll(boldItalicRegex)];
             
-            boldItalicMatches.forEach(match => {
-                // Add text before this match
-                if (match.index > lastIndex) {
+            if (boldItalicMatches.length > 0) {
+                let lastIndex = 0;
+                
+                boldItalicMatches.forEach(match => {
+                    // Add text before this match
+                    if (match.index > lastIndex) {
+                        segments.push({
+                            text: remainingText.substring(lastIndex, match.index),
+                            format: 'normal'
+                        });
+                    }
+                    
+                    // Add the bold-italic text
                     segments.push({
-                        text: remainingText.substring(lastIndex, match.index),
+                        text: match[1],
+                        format: 'bolditalic'
+                    });
+                    
+                    lastIndex = match.index + match[0].length;
+                });
+                
+                // Add any text after the last match
+                if (lastIndex < remainingText.length) {
+                    segments.push({
+                        text: remainingText.substring(lastIndex),
                         format: 'normal'
                     });
                 }
                 
-                // Add the bold-italic text
-                segments.push({
-                    text: match[1],
-                    format: 'bolditalic'
-                });
-                
-                lastIndex = match.index + match[0].length;
-            });
-            
-            // Add any text after the last match
-            if (lastIndex < remainingText.length) {
-                segments.push({
-                    text: remainingText.substring(lastIndex),
-                    format: 'normal'
-                });
+                processingComplete = true;
             }
-            
-            return segments;
         }
         
         // Bold (**text**)
-        const boldRegex = /\*\*(.*?)\*\*/g;
-        const boldMatches = [...remainingText.matchAll(boldRegex)];
-        
-        if (boldMatches.length > 0) {
-            let lastIndex = 0;
+        if (!processingComplete) {
+            const boldRegex = /\*\*(.*?)\*\*/g;
+            const boldMatches = [...remainingText.matchAll(boldRegex)];
             
-            boldMatches.forEach(match => {
-                // Add text before this match
-                if (match.index > lastIndex) {
+            if (boldMatches.length > 0) {
+                let lastIndex = 0;
+                
+                boldMatches.forEach(match => {
+                    // Add text before this match
+                    if (match.index > lastIndex) {
+                        segments.push({
+                            text: remainingText.substring(lastIndex, match.index),
+                            format: 'normal'
+                        });
+                    }
+                    
+                    // Add the bold text
                     segments.push({
-                        text: remainingText.substring(lastIndex, match.index),
+                        text: match[1],
+                        format: 'bold'
+                    });
+                    
+                    lastIndex = match.index + match[0].length;
+                });
+                
+                // Add any text after the last match
+                if (lastIndex < remainingText.length) {
+                    segments.push({
+                        text: remainingText.substring(lastIndex),
                         format: 'normal'
                     });
                 }
                 
-                // Add the bold text
-                segments.push({
-                    text: match[1],
-                    format: 'bold'
-                });
-                
-                lastIndex = match.index + match[0].length;
-            });
-            
-            // Add any text after the last match
-            if (lastIndex < remainingText.length) {
-                segments.push({
-                    text: remainingText.substring(lastIndex),
-                    format: 'normal'
-                });
+                processingComplete = true;
             }
-            
-            return segments;
         }
         
         // Italic (*text*)
-        const italicRegex = /\*(.*?)\*/g;
-        const italicMatches = [...remainingText.matchAll(italicRegex)];
-        
-        if (italicMatches.length > 0) {
-            let lastIndex = 0;
+        if (!processingComplete) {
+            const italicRegex = /\*(.*?)\*/g;
+            const italicMatches = [...remainingText.matchAll(italicRegex)];
             
-            italicMatches.forEach(match => {
-                // Add text before this match
-                if (match.index > lastIndex) {
+            if (italicMatches.length > 0) {
+                let lastIndex = 0;
+                
+                italicMatches.forEach(match => {
+                    // Add text before this match
+                    if (match.index > lastIndex) {
+                        segments.push({
+                            text: remainingText.substring(lastIndex, match.index),
+                            format: 'normal'
+                        });
+                    }
+                    
+                    // Add the italic text
                     segments.push({
-                        text: remainingText.substring(lastIndex, match.index),
+                        text: match[1],
+                        format: 'italic'
+                    });
+                    
+                    lastIndex = match.index + match[0].length;
+                });
+                
+                // Add any text after the last match
+                if (lastIndex < remainingText.length) {
+                    segments.push({
+                        text: remainingText.substring(lastIndex),
                         format: 'normal'
                     });
                 }
                 
-                // Add the italic text
-                segments.push({
-                    text: match[1],
-                    format: 'italic'
-                });
-                
-                lastIndex = match.index + match[0].length;
-            });
-            
-            // Add any text after the last match
-            if (lastIndex < remainingText.length) {
-                segments.push({
-                    text: remainingText.substring(lastIndex),
-                    format: 'normal'
-                });
+                processingComplete = true;
             }
-            
-            return segments;
         }
         
         // Strikethrough (~~text~~)
-        const strikeRegex = /~~(.*?)~~/g;
-        const strikeMatches = [...remainingText.matchAll(strikeRegex)];
-        
-        if (strikeMatches.length > 0) {
-            let lastIndex = 0;
+        if (!processingComplete) {
+            const strikeRegex = /~~(.*?)~~/g;
+            const strikeMatches = [...remainingText.matchAll(strikeRegex)];
             
-            strikeMatches.forEach(match => {
-                // Add text before this match
-                if (match.index > lastIndex) {
+            if (strikeMatches.length > 0) {
+                let lastIndex = 0;
+                
+                strikeMatches.forEach(match => {
+                    // Add text before this match
+                    if (match.index > lastIndex) {
+                        segments.push({
+                            text: remainingText.substring(lastIndex, match.index),
+                            format: 'normal'
+                        });
+                    }
+                    
+                    // Add the strikethrough text
                     segments.push({
-                        text: remainingText.substring(lastIndex, match.index),
+                        text: match[1],
+                        format: 'strikethrough'
+                    });
+                    
+                    lastIndex = match.index + match[0].length;
+                });
+                
+                // Add any text after the last match
+                if (lastIndex < remainingText.length) {
+                    segments.push({
+                        text: remainingText.substring(lastIndex),
                         format: 'normal'
                     });
                 }
                 
-                // Add the strikethrough text
-                segments.push({
-                    text: match[1],
-                    format: 'strikethrough'
+                processingComplete = true;
+            }
+        }
+        
+        // NEW: Inline code (`text`)
+        if (!processingComplete) {
+            const codeRegex = /`([^`]+)`/g;
+            const codeMatches = [...remainingText.matchAll(codeRegex)];
+            
+            if (codeMatches.length > 0) {
+                let lastIndex = 0;
+                
+                codeMatches.forEach(match => {
+                    // Add text before this match
+                    if (match.index > lastIndex) {
+                        segments.push({
+                            text: remainingText.substring(lastIndex, match.index),
+                            format: 'normal'
+                        });
+                    }
+                    
+                    // Add the inline code
+                    segments.push({
+                        text: match[1],
+                        format: 'inlinecode'
+                    });
+                    
+                    lastIndex = match.index + match[0].length;
                 });
                 
-                lastIndex = match.index + match[0].length;
-            });
-            
-            // Add any text after the last match
-            if (lastIndex < remainingText.length) {
-                segments.push({
-                    text: remainingText.substring(lastIndex),
-                    format: 'normal'
-                });
+                // Add any text after the last match
+                if (lastIndex < remainingText.length) {
+                    segments.push({
+                        text: remainingText.substring(lastIndex),
+                        format: 'normal'
+                    });
+                }
+                
+                processingComplete = true;
             }
-            
-            return segments;
         }
         
         // If no formatting found, return the text as normal

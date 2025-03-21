@@ -4,6 +4,7 @@
 const UIManager = (function() {
     // Store DOM elements references
     let printButton, settingsDialog, progressBar, progressText, progressContainer;
+    let isAdvancedMode = false; // Track if advanced settings are shown
     
     // Initialize UI components
     function initialize() {
@@ -25,6 +26,7 @@ const UIManager = (function() {
     // Create settings dialog with all configuration options
     function createSettingsDialog() {
         settingsDialog = document.createElement('div');
+        settingsDialog.id = 'pdfSettingsDialog';
         
         // Set common dialog styles
         Object.assign(settingsDialog.style, {
@@ -45,403 +47,568 @@ const UIManager = (function() {
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
         });
         
-        // Add dialog content
+        // Add dialog content with basic/advanced toggle
         settingsDialog.innerHTML = `
             <h3>PDF Settings</h3>
-            <!-- Basic PDF settings -->
-            <div style="margin-bottom: 10px;">
-                <label for="paperSize">Paper Size:</label>
-                <select id="paperSize" style="margin-left: 5px;">
-                    <option value="a4">A4</option>
-                    <option value="letter">Letter</option>
-                    <option value="legal">Legal</option>
-                </select>
+            <div class="settings-mode-toggle" style="margin-bottom: 15px; text-align: right;">
+                <label>
+                    <span style="margin-right: 8px; font-size: 12px;">Advanced Settings</span>
+                    <input type="checkbox" id="advancedModeToggle" style="vertical-align: middle;">
+                </label>
             </div>
             
-            <div style="margin-bottom: 10px;">
-                <label for="orientation">Orientation:</label>
-                <select id="orientation" style="margin-left: 5px;">
-                    <option value="portrait">Portrait</option>
-                    <option value="landscape">Landscape</option>
-                </select>
-            </div>
-            
-            <div style="margin-bottom: 10px;">
-                <label for="theme">Theme:</label>
-                <select id="themeSelect" style="margin-left: 5px;">
-                    ${generateThemeOptions()}
-                </select>
-                <div style="font-size: 10px; color: #999; margin-top: 3px;">
-                    Changes document colors and styles
+            <!-- Basic Settings (Always Visible) -->
+            <div class="basic-settings">
+                <div style="margin-bottom: 10px;">
+                    <label for="paperSize">Paper Size:</label>
+                    <select id="paperSize" style="margin-left: 5px;">
+                        <option value="a4" selected>A4</option>
+                        <option value="letter">Letter</option>
+                        <option value="legal">Legal</option>
+                    </select>
+                </div>
+                
+                <div style="margin-bottom: 10px;">
+                    <label for="orientation">Orientation:</label>
+                    <select id="orientation" style="margin-left: 5px;">
+                        <option value="portrait" selected>Portrait</option>
+                        <option value="landscape">Landscape</option>
+                    </select>
+                </div>
+                
+                <div style="margin-bottom: 10px;">
+                    <label for="margins">Margins (mm):</label>
+                    <input type="number" id="margins" min="0" max="50" value="10" style="width: 50px; margin-left: 5px;">
+                </div>
+                
+                <div style="margin-bottom: 10px;">
+                    <label for="theme">Theme:</label>
+                    <select id="theme" style="margin-left: 5px;">
+                        ${generateThemeOptions()}
+                    </select>
+                </div>
+                
+                <div style="margin-bottom: 10px;">
+                    <label for="imageQuality">Image Quality:</label>
+                    <select id="imageQuality" style="margin-left: 5px;">
+                        <option value="low">Low (Faster)</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High (Slower)</option>
+                    </select>
                 </div>
             </div>
             
-            <div style="margin-bottom: 10px;">
-                <label for="margins">Margins (mm):</label>
-                <input type="number" id="margins" min="5" max="50" value="10" style="width: 50px; margin-left: 5px;">
-            </div>
-            
-            <div style="margin-bottom: 10px;">
-                <label for="imageQuality">Image Quality:</label>
-                <select id="imageQuality" style="margin-left: 5px;">
-                    <option value="low">Low</option>
-                    <option value="medium" selected>Medium</option>
-                    <option value="high">High</option>
-                </select>
-            </div>
-            
-            <div style="margin-bottom: 10px;">
-                <label>Include:</label>
-                <div style="margin-left: 20px;">
-                    <input type="checkbox" id="includeHeader" checked>
-                    <label for="includeHeader">Headers</label>
+            <!-- Advanced Settings (Initially Hidden) -->
+            <div id="advancedSettings" style="display: none; border-top: 1px solid #eee; margin-top: 15px; padding-top: 15px;">
+                <h4 style="margin-top: 0;">Advanced Settings</h4>
+                
+                <div style="margin-bottom: 10px;">
+                    <label for="includeImages">Include Images:</label>
+                    <input type="checkbox" id="includeImages" checked style="margin-left: 5px;">
                 </div>
-                <div style="margin-left: 20px;">
-                    <input type="checkbox" id="includeImages" checked>
-                    <label for="includeImages">Images</label>
+                
+                <div style="margin-bottom: 10px;">
+                    <label for="includeTables">Include Tables:</label>
+                    <input type="checkbox" id="includeTables" checked style="margin-left: 5px;">
                 </div>
-                <div style="margin-left: 20px;">
-                    <input type="checkbox" id="includeCode" checked>
-                    <label for="includeCode">Code Blocks</label>
+                
+                <div style="margin-bottom: 10px;">
+                    <label for="includeCode">Include Code Blocks:</label>
+                    <input type="checkbox" id="includeCode" checked style="margin-left: 5px;">
                 </div>
-                <div style="margin-left: 20px;">
-                    <input type="checkbox" id="includeTables" checked>
-                    <label for="includeTables">Tables</label>
+                
+                <div style="margin-bottom: 10px;">
+                    <label for="respectPageBreaks">Respect Page Breaks:</label>
+                    <input type="checkbox" id="respectPageBreaks" checked style="margin-left: 5px;">
                 </div>
-                <div style="margin-left: 20px;">
-                    <input type="checkbox" id="respectPageBreaks" checked>
-                    <label for="respectPageBreaks">LaTeX Commands</label>
+                
+                <div style="margin-bottom: 10px;">
+                    <label for="svgHandling">SVG Handling:</label>
+                    <select id="svgHandling" style="margin-left: 5px;">
+                        <option value="vector" selected>Vector (High Quality)</option>
+                        <option value="raster">Raster (Compatible)</option>
+                    </select>
                 </div>
-            </div>
-            
-            <div style="margin-bottom: 10px;">
-                <label for="pdfVersion">PDF Compatibility:</label>
-                <select id="pdfVersion" style="margin-left: 5px;">
-                    <option value="1.3">PDF 1.3 (Acrobat 4)</option>
-                    <option value="1.4" selected>PDF 1.4 (Acrobat 5)</option>
-                    <option value="1.5">PDF 1.5 (Acrobat 6)</option>
-                </select>
-            </div>
-            
-            <div style="margin-bottom: 10px;">
-                <label>Image Format:</label>
-                <select id="imageFormat" style="margin-left: 5px;">
-                    <option value="JPEG" selected>JPEG (smaller files)</option>
-                    <option value="PNG">PNG (better quality)</option>
-                </select>
-            </div>
-            
-            <div style="margin-bottom: 10px;">
-                <label>SVG Handling:</label>
-                <select id="svgHandling" style="margin-left: 5px;">
-                    <option value="raster" selected>Raster (high-quality)</option>
-                    <option value="vector" disabled>Vector (temporarily disabled)</option>
-                </select>
-                <div style="font-size: 10px; color: #999; margin-top: 3px;">
-                    Using enhanced raster rendering for best quality
+                
+                <div style="margin-bottom: 10px;">
+                    <label for="imageFormat">Image Format:</label>
+                    <select id="imageFormat" style="margin-left: 5px;">
+                        <option value="JPEG" selected>JPEG (Smaller Files)</option>
+                        <option value="PNG">PNG (Better Quality)</option>
+                    </select>
+                </div>
+                
+                <div style="margin-bottom: 10px;">
+                    <label for="pdfVersion">PDF Version:</label>
+                    <select id="pdfVersion" style="margin-left: 5px;">
+                        <option value="1.3">1.3 (More Compatible)</option>
+                        <option value="1.4" selected>1.4</option>
+                        <option value="1.5">1.5</option>
+                        <option value="1.6">1.6</option>
+                        <option value="1.7">1.7 (Latest, Less Compatible)</option>
+                    </select>
                 </div>
             </div>
             
-            <div style="margin-bottom: 10px; padding: 5px; background-color: #f8f8f8; border-radius: 4px;">
-                <div style="font-size: 12px; color: #42b983;">
-                    <strong>New!</strong> PDF now supports clickable links and text formatting
-                </div>
+            <!-- Buttons -->
+            <div style="margin-top: 20px; display: flex; justify-content: space-between;">
+                <button id="cancelButton" style="padding: 8px 15px; background-color: #f0f0f0; border: none; border-radius: 4px; cursor: pointer;">Cancel</button>
+                <button id="generateButton" style="padding: 8px 15px; background-color: #42b983; color: white; border: none; border-radius: 4px; cursor: pointer;">Generate PDF</button>
             </div>
             
-            <!-- UI controls for PDF generation -->
-            <div style="display: flex; justify-content: space-between; margin-top: 15px;">
-                <button id="startPDF" style="padding: 8px 15px; background-color: #42b983; color: white; border: none; border-radius: 4px; cursor: pointer;">Generate PDF</button>
-                <button id="cancelPDF" style="padding: 8px 15px; background-color: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">Cancel</button>
-                <button id="debugPDF" style="padding: 8px 15px; background-color: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">Debug</button>
-            </div>
-            
-            <!-- Progress tracking -->
-            <div id="progressContainer" style="display: none; margin-top: 15px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                    <div id="progressText">Processing...</div>
-                    <div>
-                        <button id="minimizeProgress" style="background: none; border: none; font-size: 16px; cursor: pointer; margin-right: 5px;">−</button>
-                        <button id="closeProgress" style="background: none; border: none; font-size: 16px; cursor: pointer;">×</button>
-                    </div>
+            <div id="progressContainer" style="margin-top: 20px; display: none;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                    <span id="progressText">Generating PDF...</span>
+                    <span id="progressDetails" style="font-size: 11px; color: #666;"></span>
                 </div>
-                <progress id="progressBar" value="0" max="100" style="width: 100%; margin-top: 5px;"></progress>
-                <div id="progressStepDetail" style="font-size: 11px; color: #666; margin-top: 5px;"></div>
+                <progress id="progressBar" value="0" max="100" style="width: 100%;"></progress>
+                
+                <div style="margin-top: 10px; text-align: center;">
+                    <button id="cancelGenerationButton" style="padding: 5px 10px; background-color: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">Cancel</button>
+                </div>
             </div>
         `;
         
+        // Add the dialog to the document BEFORE trying to access its elements
         document.body.appendChild(settingsDialog);
         
-        // Cache DOM references for better performance
-        progressContainer = document.getElementById('progressContainer');
-        progressBar = document.getElementById('progressBar');
-        progressText = document.getElementById('progressText');
+        // Set up event listeners for advanced mode toggle now that the element exists
+        setupAdvancedModeToggle();
         
-        // Set up minimize/close buttons
+        // Set up progress controls now that the elements exist
         setupProgressControls();
+    }
+    
+    // Set up advanced mode toggle
+    function setupAdvancedModeToggle() {
+        const advancedModeToggle = document.getElementById('advancedModeToggle');
+        const advancedSettings = document.getElementById('advancedSettings');
+        
+        if (advancedModeToggle && advancedSettings) {
+            advancedModeToggle.addEventListener('change', function() {
+                isAdvancedMode = this.checked;
+                advancedSettings.style.display = isAdvancedMode ? 'block' : 'none';
+            });
+        } else {
+            Logger.warn('Advanced mode toggle elements not found');
+        }
     }
     
     // Set up progress control buttons
     function setupProgressControls() {
-        // Minimize button handler
-        document.getElementById('minimizeProgress').addEventListener('click', function() {
-            const isMinimized = progressBar.style.display === 'none';
-            const progressStepDetail = document.getElementById('progressStepDetail');
+        try {
+            progressBar = document.getElementById('progressBar');
+            progressText = document.getElementById('progressText');
+            progressContainer = document.getElementById('progressContainer');
+            const progressDetails = document.getElementById('progressDetails');
             
-            // Toggle minimized state
-            progressBar.style.display = isMinimized ? 'block' : 'none';
-            progressStepDetail.style.display = isMinimized ? 'block' : 'none';
-            this.textContent = isMinimized ? '−' : '+';
-        });
-        
-        // Close button handler
-        document.getElementById('closeProgress').addEventListener('click', () => {
-            settingsDialog.style.display = 'none';
-        });
+            // Set up cancel generation button
+            const cancelGenerationButton = document.getElementById('cancelGenerationButton');
+            if (cancelGenerationButton) {
+                cancelGenerationButton.addEventListener('click', function() {
+                    resetDialogToSettingsMode();
+                });
+            }
+            
+            if (!progressBar || !progressText || !progressContainer) {
+                Logger.warn('Some progress control elements were not found');
+            }
+        } catch (error) {
+            Logger.error('Error setting up progress controls:', error);
+        }
     }
     
     // Generate theme options for selector
     function generateThemeOptions() {
-        if (typeof ThemeManager === 'undefined') {
-            return '<option value="light">Light</option><option value="dark">Dark</option>';
-        }
+        // Default themes if ThemeManager is not available
+        const defaultThemes = ['light', 'dark'];
         
-        const themes = ThemeManager.getAvailableThemes();
-        const currentTheme = ThemeManager.getCurrentTheme().name.toLowerCase();
+        // Get available themes from ThemeManager if available
+        const themes = (typeof ThemeManager !== 'undefined' && ThemeManager.getAvailableThemes) ? 
+            ThemeManager.getAvailableThemes() : defaultThemes;
         
-        return themes.map(theme => {
-            const themeName = typeof theme === 'string' ? theme : theme.name;
-            const isSelected = themeName.toLowerCase() === currentTheme ? 'selected' : '';
-            
-            // Display name with first letter capitalized
-            const displayName = themeName.charAt(0).toUpperCase() + themeName.slice(1).toLowerCase();
-            
-            return `<option value="${themeName}" ${isSelected}>${displayName}</option>`;
-        }).join('');
+        return themes.map(theme => 
+            `<option value="${theme}">${theme.charAt(0).toUpperCase() + theme.slice(1)}</option>`
+        ).join('');
     }
     
     // Create the PDF button
     function createPrintButton() {
         printButton = document.createElement('button');
-        printButton.innerText = 'Print to PDF';
         printButton.className = 'pdf-button';
+        printButton.innerHTML = '<span>Generate PDF</span>';
         
-        // Apply isolated style to avoid interference with other elements
-        Object.assign(printButton.style, {
-            position: 'fixed',
-            bottom: '20px',
-            right: '20px',
-            padding: '8px 15px',
-            backgroundColor: '#42b983',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            zIndex: '3',
-            boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
-            userSelect: 'none'
-        });
-        
-        // Add directly to body for isolation
-        try {
+        // Add to the sidebar
+        const sidebar = document.querySelector('.sidebar');
+        if (sidebar) {
+            // Create a container for the button that will be positioned at the bottom
+            const container = document.createElement('div');
+            container.className = 'pdf-button-container';
+            
+            // Style container to position at bottom of sidebar
+            Object.assign(container.style, {
+                position: 'fixed',
+                bottom: '20px',
+                left: '0',
+                width: '300px', // Match sidebar width
+                padding: '10px 15px',
+                textAlign: 'right',
+                zIndex: '10',
+                boxSizing: 'border-box'
+            });
+            
+            // Style the button
+            Object.assign(printButton.style, {
+                padding: '8px 12px',
+                fontSize: '13px',
+                backgroundColor: '#42b983',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
+                display: 'inline-block'
+            });
+            
+            container.appendChild(printButton);
+            document.body.appendChild(container);
+            
+            // Ensure it's only visible when sidebar is open
+            adjustButtonPosition();
+            
+            Logger.debug('PDF button added to sidebar bottom right');
+        } else {
+            // Fallback to fixed position if no sidebar
+            Object.assign(printButton.style, {
+                position: 'fixed',
+                bottom: '20px',
+                right: '20px',
+                padding: '8px 15px',
+                backgroundColor: '#42b983',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                zIndex: '100',
+                boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+            });
+            
             document.body.appendChild(printButton);
-            Logger.debug('Print button added to document body');
-        } catch (e) {
-            Logger.error('Error adding print button to DOM:', e);
-            setTimeout(() => {
-                try {
-                    document.body.appendChild(printButton);
-                    Logger.debug('Print button added to DOM (delayed)');
-                } catch (e2) {
-                    Logger.error('Fatal error adding print button:', e2);
-                }
-            }, 1000);
+            Logger.debug('PDF button added to body (fallback)');
         }
     }
     
-    // Adjust button position (simplified)
+    // Adjust button position based on sidebar state
     function adjustButtonPosition() {
-        if (!printButton) return;
+        const container = document.querySelector('.pdf-button-container');
+        if (!container) return;
+
+        const sidebar = document.querySelector('.sidebar');
+        if (!sidebar) return;
         
-        // Keep fixed position to avoid interference
-        printButton.style.right = '20px';
-        printButton.style.bottom = '20px';
+        // Get sidebar width and adjust container width to match
+        const sidebarRect = sidebar.getBoundingClientRect();
+        container.style.width = `${sidebarRect.width}px`;
+        
+        // Show/hide based on sidebar visibility
+        const isSidebarClosed = document.body.classList.contains('close');
+        container.style.display = isSidebarClosed ? 'none' : 'block';
     }
     
     // Set up all event listeners
     function setupEventListeners() {
-        // Button click handlers
-        printButton.addEventListener('click', showSettingsDialog);
-        document.getElementById('startPDF').addEventListener('click', startPdfGeneration);
-        document.getElementById('cancelPDF').addEventListener('click', closeSettingsDialog);
-        document.getElementById('debugPDF').addEventListener('click', debugPdfGeneration);
+        // Cancel button
+        const cancelButton = document.getElementById('cancelButton');
+        if (cancelButton) {
+            cancelButton.addEventListener('click', closeSettingsDialog);
+        } else {
+            Logger.warn('Cancel button not found');
+        }
+        
+        // Generate button
+        const generateButton = document.getElementById('generateButton');
+        if (generateButton) {
+            generateButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                startPdfGeneration();
+            });
+        } else {
+            Logger.warn('Generate button not found');
+        }
+        
+        // PDF button
+        if (printButton) {
+            printButton.addEventListener('click', showSettingsDialog);
+        } else {
+            Logger.warn('Print button not found');
+        }
+        
+        // Handle window resize to reposition button
+        window.addEventListener('resize', adjustButtonPosition);
+        
+        // Listen for sidebar toggle events
+        const sidebarToggle = document.querySelector('.sidebar-toggle');
+        if (sidebarToggle) {
+            sidebarToggle.addEventListener('click', function() {
+                // Use setTimeout to make sure class changes happen first
+                setTimeout(adjustButtonPosition, 50);
+            });
+        }
+        
+        // Monitor for sidebar class changes (for other ways the sidebar might be toggled)
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.target.classList && 
+                    (mutation.oldValue || '').includes('close') !== 
+                    mutation.target.classList.contains('close')) {
+                    adjustButtonPosition();
+                }
+            });
+        });
+        
+        // Start observing the body for class changes
+        if (document.body) {
+            observer.observe(document.body, { 
+                attributes: true, 
+                attributeFilter: ['class'],
+                attributeOldValue: true
+            });
+        }
     }
     
     // Show settings dialog
     function showSettingsDialog() {
-        settingsDialog.style.display = 'block';
+        // Create overlay
         createOverlay();
+        
+        // Show dialog
+        if (settingsDialog) {
+            settingsDialog.style.display = 'block';
+        } else {
+            Logger.error('Settings dialog not found');
+        }
     }
     
     // Close settings dialog
     function closeSettingsDialog() {
-        settingsDialog.style.display = 'none';
-        resetDialogToSettingsMode();
+        // Remove overlay
         removeOverlay();
+        
+        // Hide dialog
+        if (settingsDialog) {
+            settingsDialog.style.display = 'none';
+        }
     }
     
     // Start PDF generation
     function startPdfGeneration() {
-        const options = getOptions();
-        
-        // Hide settings, show progress
-        document.querySelectorAll('#settingsDialog h3, #settingsDialog div:not(#progressContainer)').forEach(element => {
-            if (element.id !== 'progressContainer' && !element.closest('#progressContainer')) {
-                element.style.display = 'none';
+        try {
+            // Check if settings dialog exists
+            if (!settingsDialog) {
+                Logger.error('Settings dialog not found');
+                return;
             }
-        });
-        
-        // Show progress updates
-        progressContainer.style.display = 'block';
-        document.getElementById('progressStepDetail').style.display = 'block';
-        progressText.textContent = 'Initializing PDF generation...';
-        
-        // Start PDF generation with small delay for UI updates
-        setTimeout(() => {
-            if (typeof PDFGenerator?.generatePDF === 'function') {
-                PDFGenerator.generatePDF(options);
-            } else {
-                updateProgress(0, 'Error: PDF Generator not available', 'Please reload the page and try again.');
-                console.error('PDFGenerator is not available');
+            
+            // Check if PDFGenerator exists
+            if (typeof PDFGenerator === 'undefined' || typeof PDFGenerator.generatePDF !== 'function') {
+                showErrorMessage('PDF Generator module not loaded');
+                return;
             }
-        }, 100);
+            
+            // Get options from form
+            const options = getOptions();
+            
+            // Show progress container
+            if (progressContainer) {
+                // Hide generate/cancel buttons
+                const buttonsContainer = settingsDialog.querySelector('div[style*="justify-content: space-between"]');
+                if (buttonsContainer) {
+                    buttonsContainer.style.display = 'none';
+                }
+                
+                // Show progress
+                progressContainer.style.display = 'block';
+                
+                // Update progress bar
+                updateProgress(5, 'Starting PDF generation...', 'Initializing');
+            }
+            
+            // Start PDF generation
+            Logger.info('Starting PDF generation with options:', options);
+            PDFGenerator.generatePDF(options);
+            
+        } catch (error) {
+            Logger.error('Error generating PDF:', error);
+            showErrorMessage('Error generating PDF: ' + error.message);
+            resetDialogToSettingsMode();
+        }
     }
     
     // Debug PDF generation
     function debugPdfGeneration() {
+        // Get options from form
         const options = getOptions();
-        settingsDialog.style.display = 'none';
         
-        if (typeof PDFGenerator?.debugPDF === 'function') {
-            PDFGenerator.debugPDF(options);
-        } else {
-            showErrorMessage('PDF Generator not ready. Please reload the page.');
-        }
+        // Call debug function
+        PDFGenerator.debugPDF(options);
+        
+        // Close dialog
+        closeSettingsDialog();
     }
     
     // Show temporary error message
     function showErrorMessage(message, duration = 5000) {
-        const errorBox = document.createElement('div');
-        Object.assign(errorBox.style, {
-            position: 'fixed',
-            bottom: '70px',
-            right: '20px',
-            backgroundColor: '#f8d7da',
-            color: '#721c24',
-            padding: '10px',
-            borderRadius: '5px',
-            zIndex: '1000'
-        });
-        errorBox.textContent = message;
-        document.body.appendChild(errorBox);
+        // Create error message element
+        const errorMessage = document.createElement('div');
+        errorMessage.style.cssText = `
+            position: fixed; 
+            top: 20px; 
+            left: 50%; 
+            transform: translateX(-50%); 
+            background-color: #f44336; 
+            color: white; 
+            padding: 10px 20px; 
+            border-radius: 4px; 
+            z-index: 1000;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        `;
+        errorMessage.textContent = message;
         
+        // Add to document
+        document.body.appendChild(errorMessage);
+        
+        // Remove after duration
         setTimeout(() => {
-            if (errorBox.parentNode) errorBox.parentNode.removeChild(errorBox);
+            if (errorMessage.parentNode) {
+                errorMessage.parentNode.removeChild(errorMessage);
+            }
         }, duration);
     }
     
     // Create semi-transparent overlay
     function createOverlay() {
-        if (document.getElementById('pdfSettingsOverlay')) return;
-        
         const overlay = document.createElement('div');
-        overlay.id = 'pdfSettingsOverlay';
+        overlay.id = 'pdf-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 499;
+        `;
         
-        Object.assign(overlay.style, {
-            position: 'fixed',
-            top: '0',
-            left: '0',
-            width: '100%',
-            height: '100%',
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            zIndex: '200'
-        });
-        
-        overlay.addEventListener('click', e => {
-            if (e.target === overlay) closeSettingsDialog();
-        });
-        
+        // Add to document
         document.body.appendChild(overlay);
+        
+        // Close dialog when clicking overlay
+        overlay.addEventListener('click', closeSettingsDialog);
     }
     
     // Remove overlay
     function removeOverlay() {
-        const overlay = document.getElementById('pdfSettingsOverlay');
-        if (overlay) document.body.removeChild(overlay);
+        const overlay = document.getElementById('pdf-overlay');
+        if (overlay && overlay.parentNode) {
+            overlay.parentNode.removeChild(overlay);
+        }
     }
     
     // Get all options from form fields
     function getOptions() {
-        // Fixed options that shouldn't change
-        const fixedOptions = { svgHandling: 'raster' };
-        
-        // Extract form field values
-        const formOptions = {
-            paperSize: document.getElementById('paperSize').value,
-            orientation: document.getElementById('orientation').value,
-            theme: document.getElementById('themeSelect').value,
-            margins: document.getElementById('margins').value,
-            imageQuality: document.getElementById('imageQuality').value,
-            pdfVersion: document.getElementById('pdfVersion').value,
-            imageFormat: document.getElementById('imageFormat').value,
-            includeHeader: document.getElementById('includeHeader').checked,
-            includeImages: document.getElementById('includeImages').checked,
-            includeCode: document.getElementById('includeCode').checked,
-            includeTables: document.getElementById('includeTables').checked,
-            respectPageBreaks: document.getElementById('respectPageBreaks').checked
-        };
-        
-        return {...formOptions, ...fixedOptions};
+        try {
+            // Basic settings (always included)
+            const options = {
+                paperSize: document.getElementById('paperSize')?.value || 'a4',
+                orientation: document.getElementById('orientation')?.value || 'portrait',
+                margins: document.getElementById('margins')?.value || '10',
+                theme: document.getElementById('theme')?.value || 'light',
+                imageQuality: document.getElementById('imageQuality')?.value || 'medium',
+                
+                // Default values for advanced settings
+                includeImages: true,
+                includeTables: true,
+                includeCode: true,
+                respectPageBreaks: true,
+                svgHandling: 'vector',
+                imageFormat: 'JPEG',
+                pdfVersion: '1.4'
+            };
+            
+            // Add advanced settings only if in advanced mode
+            if (isAdvancedMode) {
+                options.includeImages = document.getElementById('includeImages')?.checked ?? true;
+                options.includeTables = document.getElementById('includeTables')?.checked ?? true;
+                options.includeCode = document.getElementById('includeCode')?.checked ?? true; 
+                options.respectPageBreaks = document.getElementById('respectPageBreaks')?.checked ?? true;
+                options.svgHandling = document.getElementById('svgHandling')?.value || 'vector';
+                options.imageFormat = document.getElementById('imageFormat')?.value || 'JPEG';
+                options.pdfVersion = document.getElementById('pdfVersion')?.value || '1.4';
+            }
+            
+            // Explicitly set UTF-8 and emoji support to false
+            options.unicodeFonts = false;
+            options.emojiHandling = 'strip';
+            
+            return options;
+        } catch (error) {
+            Logger.error('Error getting options:', error);
+            return {
+                paperSize: 'a4',
+                orientation: 'portrait',
+                margins: '10',
+                theme: 'light',
+                imageQuality: 'medium',
+                includeImages: true,
+                includeTables: true,
+                includeCode: true,
+                respectPageBreaks: true,
+                svgHandling: 'vector',
+                imageFormat: 'JPEG',
+                pdfVersion: '1.4',
+                unicodeFonts: false,
+                emojiHandling: 'strip'
+            };
+        }
     }
     
     // Reset dialog to settings mode
     function resetDialogToSettingsMode() {
-        // Show all settings fields
-        settingsDialog.querySelectorAll('div').forEach(field => {
-            field.style.display = '';
-        });
+        if (!settingsDialog) return;
         
         // Hide progress
-        if (progressContainer) progressContainer.style.display = 'none';
+        if (progressContainer) {
+            progressContainer.style.display = 'none';
+        }
         
-        // Reset dialog size
-        settingsDialog.style.maxWidth = '500px';
-        document.getElementById('progressStepDetail').textContent = '';
+        // Show buttons
+        const buttonsContainer = settingsDialog.querySelector('div[style*="justify-content: space-between"]');
+        if (buttonsContainer) {
+            buttonsContainer.style.display = 'flex';
+        }
+        
+        // Reset progress
+        updateProgress(0, '', '');
     }
     
     // Update progress bar and text
     function updateProgress(value, text, details) {
-        if (!progressContainer) return;
-        
-        settingsDialog.style.display = 'block';
-        progressContainer.style.display = 'block';
-        progressBar.value = value;
-        if (text) progressText.textContent = text;
-        
-        const detailsElement = document.getElementById('progressStepDetail');
-        if (details && detailsElement) detailsElement.textContent = details;
-        
-        // Auto-close on completion
-        if (value >= 100) {
-            // Show success message
-            progressText.textContent = 'PDF generated successfully!';
-            detailsElement.textContent = 'Your download should begin automatically.';
+        try {
+            if (progressBar) {
+                progressBar.value = value;
+            }
             
-            // Auto-close after delay
-            setTimeout(() => {
-                resetDialogToSettingsMode();
-                settingsDialog.style.display = 'none';
-                removeOverlay();
-            }, 3000);
+            if (progressText) {
+                progressText.textContent = text || '';
+            }
+            
+            // Update details if provided
+            const progressDetails = document.getElementById('progressDetails');
+            if (progressDetails && details) {
+                progressDetails.textContent = details;
+            }
+        } catch (error) {
+            Logger.error('Error updating progress:', error);
         }
     }
     

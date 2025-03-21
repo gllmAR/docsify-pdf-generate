@@ -69,6 +69,29 @@ const LaTeXParser = (function() {
                     align: 'center'
                 };
                 
+            case 'raggedright':
+            case 'flushleft':
+                // Left alignment (default)
+                return {
+                    type: 'alignment',
+                    align: 'left'
+                };
+                
+            case 'raggedleft':
+            case 'flushright':
+                // Right alignment
+                return {
+                    type: 'alignment',
+                    align: 'right'
+                };
+                
+            case 'justify':
+                // Justified text
+                return {
+                    type: 'alignment',
+                    align: 'justify'
+                };
+                
             default:
                 // Unrecognized command
                 return null;

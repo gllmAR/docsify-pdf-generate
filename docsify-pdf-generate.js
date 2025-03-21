@@ -15,6 +15,9 @@
     const modulesPath = {
         utils: [
             'js/utils/logger.js',
+            // Removed: 'js/utils/emojis.js', 
+            'js/utils/utf8-support.js', // Keeping simplified version for basic character handling
+            // Removed: 'js/utils/font-loader.js',
             'js/utils/dependencies.js',
             'js/utils/latex-parser.js',
             'js/utils/html-parser.js', 
@@ -165,22 +168,58 @@
     function embedStyles() {
         const styles = `
             .pdf-button {
-                position: fixed;
-                bottom: 20px;
-                right: 20px;
-                padding: 8px 15px;
+                padding: 8px 12px;
                 background-color: #42b983;
                 color: white;
                 border: none;
                 border-radius: 4px;
                 cursor: pointer;
-                z-index: 3;
+                z-index: 100;
                 box-shadow: 0 2px 5px rgba(0,0,0,0.2);
                 user-select: none;
+                display: inline-block;
+                transition: background-color 0.3s ease;
+                font-size: 13px;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            }
+            
+            .pdf-button:hover {
+                background-color: #3aa876;
+            }
+            
+            .pdf-button-container {
+                position: fixed;
+                bottom: 20px;
+                left: 0;
+                padding: 10px 15px;
+                text-align: right;
+                z-index: 10;
+                transition: opacity 0.3s ease;
+            }
+            
+            body.close .pdf-button-container {
+                display: none !important;
+            }
+            
+            /* Keep button visible even when sidebar is collapsed in mobile view */
+            @media screen and (max-width: 768px) {
+                .pdf-button-container {
+                    bottom: 15px;
+                    left: 0;
+                    width: auto !important;
+                    padding-right: 15px;
+                }
+                
+                .pdf-button {
+                    padding: 6px 10px;
+                    font-size: 12px;
+                }
             }
             
             @media print {
-                .pdf-button { display: none; }
+                .pdf-button, .pdf-button-container { 
+                    display: none !important; 
+                }
             }
             
             #progressContainer { margin-top: 10px; }
